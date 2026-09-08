@@ -253,6 +253,19 @@
   // renombran alguno el desplegable se actualiza sin tocar este archivo.
   var TEMPLATES_CC = [];
   var RESPONSABLES_FACTURA = [];
+
+  // Todo lo que viene del servidor sale de la planilla o del texto de una
+  // cotizacion subida, asi que nunca se interpola crudo en innerHTML: una
+  // "EMPRESA: <img src=x onerror=...>" en el Word quedaria guardada y se
+  // ejecutaria en el navegador de todo el equipo.
+  function esc(v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
   // Equipo (nombre + mail) que llega del backend: alimenta el desplegable de
   // tecnicos y el aviso por mail.
   var EQUIPO = [];
@@ -439,12 +452,12 @@
       var izq = document.createElement('div');
       var cuando = b.fechaBorrado ? new Date(b.fechaBorrado) : null;
       izq.innerHTML =
-        '<div class="servicio-empresa">' + (b.empresa || '(sin empresa)') +
-          (b.presupuestoGH ? ' <span style="color:var(--ink-soft);font-weight:600;">· Presupuesto GH ' + b.presupuestoGH + '</span>' : '') + '</div>' +
+        '<div class="servicio-empresa">' + esc(b.empresa || '(sin empresa)') +
+          (b.presupuestoGH ? ' <span style="color:var(--ink-soft);font-weight:600;">· Presupuesto GH ' + esc(b.presupuestoGH) + '</span>' : '') + '</div>' +
         '<div class="servicio-meta">' +
-          (b.mediciones.length ? b.mediciones.join(', ') : 'Sin mediciones registradas') +
-          (cuando && !isNaN(cuando) ? ' · Eliminada el ' + cuando.toLocaleDateString('es-AR') : '') +
-          (b.borradoPor ? ' por ' + b.borradoPor : '') +
+          (b.mediciones.length ? esc(b.mediciones.join(', ')) : 'Sin mediciones registradas') +
+          (cuando && !isNaN(cuando) ? ' · Eliminada el ' + esc(cuando.toLocaleDateString('es-AR')) : '') +
+          (b.borradoPor ? ' por ' + esc(b.borradoPor) : '') +
         '</div>';
       fila.appendChild(izq);
 
@@ -590,9 +603,9 @@
       var head = document.createElement('div');
       head.className = 'servicio-head';
       head.innerHTML =
-        '<div><div class="servicio-empresa">' + s.empresa + (s.presupuestoGH ? ' <span style="color:var(--ink-soft);font-weight:600;">· Presupuesto GH ' + s.presupuestoGH + '</span>' : '') + '</div>' +
-        '<div class="servicio-meta">' + (s.mediciones.length ? (s.mediciones.length + ' medición(es): ' + s.mediciones.map(function (m) { return m.tipoMuestra || '(sin tipo)'; }).join(', ')) : 'Servicio nuevo — todavía sin mediciones registradas') +
-        (s.fechaMuestreo ? ' · Muestreo ' + s.fechaMuestreo : '') + '</div></div>' +
+        '<div><div class="servicio-empresa">' + esc(s.empresa) + (s.presupuestoGH ? ' <span style="color:var(--ink-soft);font-weight:600;">· Presupuesto GH ' + esc(s.presupuestoGH) + '</span>' : '') + '</div>' +
+        '<div class="servicio-meta">' + (s.mediciones.length ? (s.mediciones.length + ' medición(es): ' + s.mediciones.map(function (m) { return esc(m.tipoMuestra || '(sin tipo)'); }).join(', ')) : 'Servicio nuevo — todavía sin mediciones registradas') +
+        (s.fechaMuestreo ? ' · Muestreo ' + esc(s.fechaMuestreo) : '') + '</div></div>' +
         '<div class="servicio-right">' +
         (s.presupuestoGH && !s.checklist.terminadoManual ? '<span class="progreso">Checklist ' + progreso.listos + '/' + progreso.total + '</span>' : '') +
         '<span class="badge ' + etapa.color + '"><span class="dot ' + etapa.color + '"></span>' + etapa.label + '</span>' +
@@ -608,9 +621,18 @@
         terminadoBtn.title = 'Esta medición ya estaba cargada antes del dashboard: marcala como terminada si ya se hizo por completo.';
         terminadoBtn.addEventListener('click', function (ev) {
           ev.stopPropagation();
-          callBackend('updateChecklist', { presupuestoGH: key, empresa: s.empresa, field: 'terminadoManual', value: !s.checklist.terminadoManual }).then(function (data) {
-            if (data.ok) { SERVICIOS = data.servicios; render(); }
-          });
+          terminadoBtn.disabled = true;
+          callBackend('updateChecklist', { presupuestoGH: key, empresa: s.empresa, field: 'terminadoManual', value: !s.checklist.terminadoManual })
+            .then(function (data) {
+              terminadoBtn.disabled = false;
+              if (!respuestaOk(data, 'No se pudo guardar')) return;
+              SERVICIOS = data.servicios;
+              render();
+            })
+            .catch(function () {
+              terminadoBtn.disabled = false;
+              avisar('No se pudo conectar con el backend. El cambio no se guardó.', 'error');
+            });
         });
         head.querySelector('.servicio-right').insertBefore(terminadoBtn, head.querySelector('.badge'));
       }
@@ -686,18 +708,18 @@
     var rows = s.mediciones.map(function (m, i) {
       var calib = detalle[i] || { estado: 'sin_match' };
       return '<tr>' +
-        '<td>' + (m.tipoMuestra || '—') + (m.cantidadMuestras ? ' <span style="color:var(--ink-soft);">(' + m.cantidadMuestras + ')</span>' : '') + '</td>' +
-        '<td>' + (m.derivacionLab ? m.derivacionLab + (m.presupuestoLab ? ' · ppto ' + m.presupuestoLab : '') : 'Directa') + '</td>' +
+        '<td>' + esc(m.tipoMuestra || '—') + (m.cantidadMuestras ? ' <span style="color:var(--ink-soft);">(' + esc(m.cantidadMuestras) + ')</span>' : '') + '</td>' +
+        '<td>' + (m.derivacionLab ? esc(m.derivacionLab) + (m.presupuestoLab ? ' · ppto ' + esc(m.presupuestoLab) : '') : 'Directa') + '</td>' +
         '<td><span class="badge ' + (CALIB_COLOR[calib.estado] || 'gris') + '">' +
-          (CALIB_LABEL[calib.estado] || calib.estado) + '</span>' +
+          esc(CALIB_LABEL[calib.estado] || calib.estado) + '</span>' +
           ((calib.equipos || []).length
             ? '<div style="font-size:11px;color:var(--ink-soft);margin-top:3px;">' +
               calib.equipos.map(function (eq) {
-                return eq.equipo + (eq.fecha_venc ? ' · vence ' + eq.fecha_venc : ' · sin fecha');
+                return esc(eq.equipo) + (eq.fecha_venc ? ' · vence ' + esc(eq.fecha_venc) : ' · sin fecha');
               }).join('<br>') + '</div>'
             : '') + '</td>' +
-        '<td>' + (m.entregaInforme ? 'Informe listo' : (m.entregaResultados ? 'Resultados OK, falta informe' : 'Pendiente')) + (m.entregaFecha ? ' · ' + m.entregaFecha : '') + '</td>' +
-        '<td>' + (m.facturaServicio.numero ? 'Nº ' + m.facturaServicio.numero : '—') + '</td>' +
+        '<td>' + (m.entregaInforme ? 'Informe listo' : (m.entregaResultados ? 'Resultados OK, falta informe' : 'Pendiente')) + (m.entregaFecha ? ' · ' + esc(m.entregaFecha) : '') + '</td>' +
+        '<td>' + (m.facturaServicio.numero ? 'Nº ' + esc(m.facturaServicio.numero) : '—') + '</td>' +
         '</tr>';
     }).join('');
     wrap.innerHTML =
@@ -718,9 +740,18 @@
     // estable (empresa+OC+fecha) para las mediciones viejas que todavia no
     // tienen uno asignado en la planilla — así igual pueden llevar checklist.
     function update_(servicio, field, value) {
-      callBackend('updateChecklist', { presupuestoGH: key, empresa: servicio.empresa, field: field, value: value }).then(function (data) {
-        if (data.ok) { SERVICIOS = data.servicios; render(); }
-      });
+      callBackend('updateChecklist', { presupuestoGH: key, empresa: servicio.empresa, field: field, value: value })
+        .then(function (data) {
+          // Si falla hay que volver a dibujar igual: el checkbox ya quedo
+          // tildado por el click del navegador y estaria mintiendo.
+          if (!respuestaOk(data, 'No se pudo guardar')) { render(); return; }
+          SERVICIOS = data.servicios;
+          render();
+        })
+        .catch(function () {
+          avisar('No se pudo conectar con el backend. El cambio no se guardó.', 'error');
+          render();
+        });
     }
 
     // Las mediciones que ya estaban cargadas antes de este dashboard no
@@ -1644,7 +1675,13 @@
     return div;
   }
 
-  document.getElementById('search').addEventListener('input', render);
+  // Sin esto, cada tecla vaciaba la lista y reconstruia todas las tarjetas con
+  // sus checklists completos.
+  var tempBusqueda = null;
+  document.getElementById('search').addEventListener('input', function () {
+    clearTimeout(tempBusqueda);
+    tempBusqueda = setTimeout(render, 180);
+  });
   document.getElementById('clearFilter').addEventListener('click', function () { currentFilter = 'todos'; render(); });
   document.querySelectorAll('.stat').forEach(function (s) {
     s.addEventListener('click', function () { currentFilter = s.dataset.filter; render(); });
