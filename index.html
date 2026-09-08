@@ -353,6 +353,10 @@
       SERVICIOS = data.servicios;
       if (data.equipo) EQUIPO = data.equipo;
       if (data.responsablesFactura) RESPONSABLES_FACTURA = data.responsablesFactura;
+      if (data.avisoColumnas && data.avisoColumnas.length) {
+        avisar('Atención: la planilla cambió de columnas y el sistema puede estar leyendo datos corridos. ' +
+          data.avisoColumnas.join(' · '), 'error');
+      }
       document.getElementById('accountEmail').textContent = data.email;
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('dashboardScreen').style.display = 'block';
@@ -511,6 +515,10 @@
       SERVICIOS = data.servicios;
       if (data.equipo) EQUIPO = data.equipo;
       if (data.responsablesFactura) RESPONSABLES_FACTURA = data.responsablesFactura;
+      if (data.avisoColumnas && data.avisoColumnas.length) {
+        avisar('Atención: la planilla cambió de columnas y el sistema puede estar leyendo datos corridos. ' +
+          data.avisoColumnas.join(' · '), 'error');
+      }
       render();
     }).catch(function () {
       btn.disabled = false;
