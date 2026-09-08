@@ -820,9 +820,12 @@
     wrap.appendChild(stepPaso_('5. Gestión de ingreso', ingresoOk, [
       subirArchivosItem_(s, c, 'ingreso', 'Documentación de ingreso (PDF)',
         'Seguros, altas, formularios de la empresa…', '.pdf,application/pdf', archIngreso),
+      checkItem_('No se necesita subir documentación para este ingreso', c.sinDocumentacionIngreso,
+        function (v) { update_(s, 'sinDocumentacionIngreso', v); }),
       checkItemCondicionado_('Ingreso del técnico gestionado', c.ingresoGestionado,
         function (v) { update_(s, 'ingresoGestionado', v); },
-        archIngreso.length > 0, 'Subí al menos un archivo de ingreso para poder marcarlo.')
+        archIngreso.length > 0 || !!c.sinDocumentacionIngreso,
+        'Subí al menos un archivo de ingreso, o marcá que no hace falta, para poder marcarlo.')
     ]));
 
     // 6. Fecha coordinada: recien despues del check de ingreso
