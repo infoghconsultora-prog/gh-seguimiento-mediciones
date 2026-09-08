@@ -634,7 +634,7 @@
             .then(function (data) {
               terminadoBtn.disabled = false;
               if (!respuestaOk(data, 'No se pudo guardar')) return;
-              SERVICIOS = data.servicios;
+              s.checklist.terminadoManual = !s.checklist.terminadoManual;
               render();
             })
             .catch(function () {
@@ -753,7 +753,12 @@
           // Si falla hay que volver a dibujar igual: el checkbox ya quedo
           // tildado por el click del navegador y estaria mintiendo.
           if (!respuestaOk(data, 'No se pudo guardar')) { render(); return; }
-          SERVICIOS = data.servicios;
+          // El backend ya no devuelve todo el dataset: se aplica el cambio sobre
+          // la copia local, que es lo unico que se modifico.
+          servicio.checklist[field] = value;
+          if (data.fechaMedicionRealizada !== null && data.fechaMedicionRealizada !== undefined) {
+            servicio.checklist.fechaMedicionRealizada = data.fechaMedicionRealizada;
+          }
           render();
         })
         .catch(function () {
