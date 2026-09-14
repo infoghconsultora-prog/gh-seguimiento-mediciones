@@ -259,13 +259,16 @@
 
 <script>
   var CLIENT_ID = '585469655594-8aj9hjmf7d4noglr1th673dbiia8ftkv.apps.googleusercontent.com';
-  var BACKEND_URL = 'https://script.google.com/macros/s/AKfycbyUebPTrBOXwJFRHGy6wWBPjATSVrzxdyUp8n5LRXky1MXyHVdtlZaNm7srZgSthskS/exec';
+  // Backend movido a la cuenta info.ghconsultora el 14/09/2026 (traspaso desde
+  // la cuenta personal de Felipe). Es un script nuevo con ID propio: el
+  // /exec viejo ya no responde.
+  var BACKEND_URL = 'https://script.google.com/macros/s/AKfycbwZC6NAzLDUleScxQb57m8T675gvtHvkn7m0R_qoPfU7_Gtv9E34_VgPmCiekUk_KHU/exec';
 
   // Se pisa a mano en cada publish (fecha UTC del momento de publicar). Sirve
   // para que una pestaña vieja se entere sola de que hay una version mas
   // nueva, en vez de quedarse corriendo el codigo con el que cargo para
   // siempre. Mismo mecanismo que en Seguimiento Ambiental.
-  var FRONTEND_VERSION = '2026-09-14T15:17';
+  var FRONTEND_VERSION = '2026-09-14T16:26';
 
   var idToken = null;
   var SERVICIOS = [];
