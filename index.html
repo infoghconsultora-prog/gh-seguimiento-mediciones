@@ -32,6 +32,15 @@
   #loginError{ color:var(--rojo); font-size:13.5px; font-weight:600; display:none; max-width:380px; }
   #loginSpinner{ display:none; color:var(--ink-soft); font-size:13px; }
 
+  /* Aviso de version nueva: no se cierra solo, se queda hasta que se recarga. */
+  #bannerVersion{ display:none; position:fixed; left:0; right:0; top:0; z-index:70;
+    background:var(--brand-dark); color:#fff; font-size:14px; font-weight:600;
+    padding:10px 16px; gap:12px; align-items:center; justify-content:center; flex-wrap:wrap; }
+  #bannerVersion.on{ display:flex; }
+  #bannerVersion button{ border:none; cursor:pointer; background:rgba(255,255,255,.22);
+    color:#fff; font-size:13px; font-weight:700; border-radius:999px; padding:6px 14px; }
+  #bannerVersion button:hover{ background:rgba(255,255,255,.32); }
+
   #dashboardScreen{ display:none; }
   header{ background:linear-gradient(180deg, #ffffff 0%, #f2f6ec 100%); border-bottom:1px solid var(--line);
     padding:20px 28px; display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap; }
@@ -158,6 +167,11 @@
 </head>
 <body>
 
+<div id="bannerVersion">
+  <span>Hay una versión más nueva del panel. Recargá para tenerla.</span>
+  <button type="button" id="btnRecargarVersion">Recargar</button>
+</div>
+
 <button id="themeToggle" type="button" aria-label="Cambiar tema claro/oscuro"></button>
 
 <div id="loginScreen">
@@ -247,6 +261,12 @@
   var CLIENT_ID = '585469655594-8aj9hjmf7d4noglr1th673dbiia8ftkv.apps.googleusercontent.com';
   var BACKEND_URL = 'https://script.google.com/macros/s/AKfycbyUebPTrBOXwJFRHGy6wWBPjATSVrzxdyUp8n5LRXky1MXyHVdtlZaNm7srZgSthskS/exec';
 
+  // Se pisa a mano en cada publish (fecha UTC del momento de publicar). Sirve
+  // para que una pestaña vieja se entere sola de que hay una version mas
+  // nueva, en vez de quedarse corriendo el codigo con el que cargo para
+  // siempre. Mismo mecanismo que en Seguimiento Ambiental.
+  var FRONTEND_VERSION = '2026-09-14T15:17';
+
   var idToken = null;
   var SERVICIOS = [];
   // Los tipos de CC salen de la carpeta real en Drive, asi que si agregan o
@@ -302,14 +322,33 @@
     }
   }
 
+  // Un pedido colgado dejaba el indicador de "Trabajando..." girando para
+  // siempre. Con un corte propio, falla rapido y con un mensaje en vez de
+  // quedarse ahi.
+  var MS_ESPERA_BACKEND = 25000;
+
   function callBackend(action, extra) {
     enVuelo++;
     refrescarIndicador();
     var payload = Object.assign({ action: action, idToken: idToken }, extra || {});
     var listo = function () { enVuelo = Math.max(0, enVuelo - 1); refrescarIndicador(); };
-    return fetch(BACKEND_URL, { method: 'POST', body: JSON.stringify(payload) })
-      .then(function (r) { return r.json(); })
-      .then(function (d) { listo(); return d; }, function (e) { listo(); throw e; });
+    var corte = new AbortController();
+    var reloj = setTimeout(function () { corte.abort(); }, MS_ESPERA_BACKEND);
+    return fetch(BACKEND_URL, { method: 'POST', body: JSON.stringify(payload), signal: corte.signal })
+      .then(function (r) { return r.text(); })
+      .then(function (txt) {
+        clearTimeout(reloj);
+        listo();
+        try { return JSON.parse(txt); }
+        catch (e) {
+          // Apps Script a veces responde con su propia pagina de error en
+          // HTML en vez del JSON esperado. Sin esto, explotaba aca mismo y
+          // llegaba al panel como si fuera un problema de red cualquiera.
+          var err = new Error('El backend respondió algo que no es JSON');
+          err.name = 'RespuestaInvalida';
+          throw err;
+        }
+      }, function (e) { clearTimeout(reloj); listo(); throw e; });
   }
 
   /* ---------- theme toggle ---------- */
@@ -333,6 +372,30 @@
     google.accounts.id.initialize({ client_id: CLIENT_ID, callback: handleCredentialResponse });
     google.accounts.id.renderButton(document.getElementById('gsiButton'), { theme: 'outline', size: 'large', text: 'signin_with' });
   };
+
+  /* --------------------- detectar una version mas nueva ---------------------
+   * Publicar un arreglo no lo aplica a quien ya tenia el panel abierto: el JS
+   * que corre en esa pestaña sigue siendo el viejo hasta que la persona
+   * recarga. Cada 5 minutos el panel pide su propia pagina (liviano, no toca
+   * el backend de Apps Script) y compara la marca de version embebida.
+   */
+  var MS_CHEQUEO_VERSION_FRONTEND = 5 * 60 * 1000;
+
+  function chequearVersionFrontend() {
+    if (document.hidden) return;
+    fetch(location.pathname + '?_v=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.text(); })
+      .then(function (txt) {
+        var m = txt.match(/FRONTEND_VERSION\s*=\s*'([^']+)'/);
+        if (m && m[1] !== FRONTEND_VERSION) {
+          clearInterval(intervaloVersionFrontend);
+          document.getElementById('bannerVersion').classList.add('on');
+        }
+      }).catch(function () {});
+  }
+  var intervaloVersionFrontend = setInterval(chequearVersionFrontend, MS_CHEQUEO_VERSION_FRONTEND);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) chequearVersionFrontend(); });
+  document.getElementById('btnRecargarVersion').addEventListener('click', function () { location.reload(); });
 
   function handleCredentialResponse(response) {
     idToken = response.credential;
