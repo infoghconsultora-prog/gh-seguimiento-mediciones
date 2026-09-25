@@ -268,7 +268,7 @@
   // para que una pestaña vieja se entere sola de que hay una version mas
   // nueva, en vez de quedarse corriendo el codigo con el que cargo para
   // siempre. Mismo mecanismo que en Seguimiento Ambiental.
-  var FRONTEND_VERSION = '2026-09-14T16:26';
+  var FRONTEND_VERSION = '2026-09-25T14:10';
 
   var idToken = null;
   var SERVICIOS = [];
@@ -325,33 +325,124 @@
     }
   }
 
-  // Un pedido colgado dejaba el indicador de "Trabajando..." girando para
-  // siempre. Con un corte propio, falla rapido y con un mensaje en vez de
-  // quedarse ahi.
-  var MS_ESPERA_BACKEND = 25000;
+  /* --------------------- pedidos al backend, a prueba de fallas ---------------------
+   * Los web apps de Apps Script fallan de forma intermitente en la "puerta de
+   * entrada" de Google (pedidos que se cuelgan 20-60 s o terminan en un 404 con
+   * la pagina "No se pudo abrir el archivo") mientras el codigo del backend
+   * responde en 1-3 s. Y fallan por proyecto, asi que hay un segundo backend
+   * (espejo, SOLO LECTURA, misma cuenta y mismos datos):
+   *  - Lecturas: el primer pedido va al principal; si no responde en 4 s se manda
+   *    otro al espejo EN PARALELO, despues al principal, etc. Gana el primero que
+   *    devuelve una respuesta valida y se cancelan los demas.
+   *  - Un 404 / respuesta que no es JSON cuenta como falla de ese intento y
+   *    dispara el siguiente al instante.
+   *  - Escrituras: van SOLO al principal y llevan un requestId; el backend las
+   *    ejecuta UNA sola vez aunque lleguen repetidas, asi que se pueden reintentar
+   *    sin duplicar un servicio, un archivo ni un mail.
+   *  - Archivos grandes: no se mandan varias veces en paralelo; solo se reintenta
+   *    despues de que fallo un intento.
+   */
+  var BACKEND_ESPEJO = 'https://script.google.com/macros/s/AKfycbwz5Eu-ScQ0qgUJQpMDE8GyotV92qIZNZn4aL1zsb269LiW0USACRPrZ1uwGG1POfxnTQ/exec';
+  var ACCIONES_LECTURA = { getData: 1, listarTemplatesCC: 1, listarBorrados: 1 };
+  var ACCIONES_ARCHIVO = { cargarCotizacion: 1, reemplazarCotizacion: 1, subirCCPersonalizada: 1, subirArchivoPaso: 1 };
+  var PLAN_LECTURA   = { escalones: [0, 4000, 8000, 13000, 20000], max: 5, porIntento: 25000, tope: 50000 };
+  var PLAN_ESCRITURA = { escalones: [0, 15000, 30000], max: 3, porIntento: 60000, tope: 90000 };
+  var PLAN_ARCHIVO   = { escalones: [0], max: 3, porIntento: 100000, tope: 240000 };
+
+  // Rastro del ultimo pedido fallado, para mostrarlo junto al error.
+  var ultimoFalloBackend = '';
+
+  function nuevoRequestId() {
+    var base = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID()
+             : Date.now().toString(36) + Math.random().toString(36).slice(2);
+    return base.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
+  }
+
+  function pedirAlBackend(action, extra) {
+    var lectura = !!ACCIONES_LECTURA[action];
+    var plan = lectura ? PLAN_LECTURA : (ACCIONES_ARCHIVO[action] ? PLAN_ARCHIVO : PLAN_ESCRITURA);
+    var cuerpo = Object.assign({ action: action, idToken: idToken }, extra || {});
+    if (!lectura) cuerpo.requestId = nuevoRequestId();
+    var texto = JSON.stringify(cuerpo);
+    var t0 = Date.now();
+
+    return new Promise(function (resolve, reject) {
+      var terminado = false, lanzados = 0, activos = 0, ultimoError = null, ultimoSuave = null;
+      var controles = [], relojes = [];
+      function cerrar(fin, valor) {
+        if (terminado) return;
+        terminado = true;
+        relojes.forEach(clearTimeout);
+        controles.forEach(function (c) { c.abort(); });
+        fin(valor);
+      }
+      function anotar(err, n) {
+        ultimoFalloBackend = action + ' · ' + ((err && err.name) || 'error') + ' a los ' +
+          Math.round((Date.now() - t0) / 1000) + ' s (intento ' + n + ' de ' + plan.max +
+          (lectura && n % 2 === 0 ? ', espejo' : '') + ')' +
+          (navigator.onLine === false ? ' · sin internet' : '');
+      }
+      function lanzar() {
+        if (terminado || lanzados >= plan.max) return;
+        var n = ++lanzados;
+        activos++;
+        var corte = new AbortController();
+        controles.push(corte);
+        // Lecturas: principal, espejo, principal, espejo... Todo lo demas: principal.
+        var base = (lectura && n % 2 === 0) ? BACKEND_ESPEJO : BACKEND_URL;
+        // Del tercer intento en adelante se repite proyecto: el parametro distinto
+        // fuerza un pedido nuevo de punta a punta en vez de reusar uno trabado.
+        var url = n <= 2 ? base : base + '?r=' + Date.now() + '_' + n;
+        var reloj = setTimeout(function () { corte.abort(); }, plan.porIntento);
+        fetch(url, { method: 'POST', body: texto, signal: corte.signal })
+          .then(function (r) { return r.text(); })
+          .then(function (txt) {
+            var json;
+            try { json = JSON.parse(txt); }
+            catch (e) {
+              // Apps Script a veces responde con su propia pagina de error en
+              // HTML en vez del JSON esperado: cuenta como falla de ese intento.
+              var err = new Error('El backend respondio algo que no es JSON');
+              err.name = 'RespuestaInvalida';
+              throw err;
+            }
+            // "en_curso": otro intento del mismo pedido sigue ejecutandose en el
+            // servidor; se espera al que termine en vez de dar esto por resultado.
+            if (json && json.error === 'en_curso') {
+              ultimoSuave = json;
+              var e2 = new Error('en curso'); e2.name = 'EnCurso'; throw e2;
+            }
+            cerrar(resolve, json);
+          })
+          .catch(function (err) { if (!terminado) { ultimoError = err; anotar(err, n); } })
+          .then(function () {
+            clearTimeout(reloj);
+            activos--;
+            if (terminado) return;
+            if (lanzados < plan.max) lanzar();
+            else if (activos === 0) {
+              if (ultimoSuave) cerrar(resolve, ultimoSuave);
+              else cerrar(reject, ultimoError || new Error('sin respuesta'));
+            }
+          });
+      }
+      plan.escalones.slice(1).forEach(function (ms) { relojes.push(setTimeout(lanzar, ms)); });
+      relojes.push(setTimeout(function () {
+        if (ultimoSuave) { cerrar(resolve, ultimoSuave); return; }
+        if (!ultimoError) { var e = new Error('tiempo agotado'); e.name = 'AbortError'; ultimoError = e; anotar(e, lanzados); }
+        cerrar(reject, ultimoError);
+      }, plan.tope));
+      lanzar();
+    });
+  }
 
   function callBackend(action, extra) {
     enVuelo++;
     refrescarIndicador();
-    var payload = Object.assign({ action: action, idToken: idToken }, extra || {});
     var listo = function () { enVuelo = Math.max(0, enVuelo - 1); refrescarIndicador(); };
-    var corte = new AbortController();
-    var reloj = setTimeout(function () { corte.abort(); }, MS_ESPERA_BACKEND);
-    return fetch(BACKEND_URL, { method: 'POST', body: JSON.stringify(payload), signal: corte.signal })
-      .then(function (r) { return r.text(); })
-      .then(function (txt) {
-        clearTimeout(reloj);
-        listo();
-        try { return JSON.parse(txt); }
-        catch (e) {
-          // Apps Script a veces responde con su propia pagina de error en
-          // HTML en vez del JSON esperado. Sin esto, explotaba aca mismo y
-          // llegaba al panel como si fuera un problema de red cualquiera.
-          var err = new Error('El backend respondió algo que no es JSON');
-          err.name = 'RespuestaInvalida';
-          throw err;
-        }
-      }, function (e) { clearTimeout(reloj); listo(); throw e; });
+    return pedirAlBackend(action, extra).then(
+      function (v) { listo(); return v; },
+      function (e) { listo(); throw e; });
   }
 
   /* ---------- theme toggle ---------- */
@@ -432,7 +523,7 @@
       document.getElementById('loginSpinner').style.display = 'none';
       document.getElementById('gsiButton').style.display = 'block';
       var err = document.getElementById('loginError');
-      err.textContent = 'No se pudo conectar con el backend. Probá de nuevo en un momento.';
+      err.textContent = 'No se pudo conectar con el backend. Probá de nuevo en un momento.' + (ultimoFalloBackend ? ' (' + ultimoFalloBackend + ')' : '');
       err.style.display = 'block';
     });
   }
