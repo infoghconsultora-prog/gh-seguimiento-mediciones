@@ -23,14 +23,42 @@
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
   a{color:inherit;}
 
-  #loginScreen{ min-height:100vh; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:18px; text-align:center; padding:24px; }
-  #loginScreen .logo{ font-weight:800; font-size:40px; letter-spacing:-1px;
-    background:linear-gradient(135deg, var(--brand-dark), var(--brand));
-    -webkit-background-clip:text; background-clip:text; color:transparent; }
-  #loginScreen h1{ font-size:20px; margin:0; }
-  #loginScreen p{ color:var(--ink-soft); font-size:14px; max-width:380px; margin:0; }
-  #loginError{ color:var(--rojo); font-size:13.5px; font-weight:600; display:none; max-width:380px; }
-  #loginSpinner{ display:none; color:var(--ink-soft); font-size:13px; }
+  #loginScreen{ min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .login-card{ background:var(--card); border-radius:20px; padding:40px 36px;
+    max-width:420px; width:100%; text-align:center;
+    box-shadow:0 2px 4px rgba(43,47,38,.10), 0 16px 40px rgba(43,47,38,.14); }
+  .login-logo{ display:block; height:64px; margin:0 auto 18px; }
+  #loginScreen h1{ font-size:22px; line-height:28px; font-weight:600; margin:0 0 8px; letter-spacing:-.35px; }
+  #loginScreen p{ font-size:15px; line-height:20px; color:var(--ink-soft); margin:0 0 24px; }
+  #gsiButton{ display:flex; justify-content:center; }
+  #loginSpinner{ display:none; margin-top:18px; }
+  .loading-track{ position:relative; width:220px; height:4px; margin:0 auto;
+    border-radius:999px; background:var(--line); overflow:hidden; }
+  .loading-glow{ position:absolute; top:0; left:0; height:100%; width:36%; border-radius:999px;
+    background:linear-gradient(90deg, transparent, var(--brand-dark) 50%, transparent);
+    animation:barrido 1.5s ease-in-out infinite; }
+  @keyframes barrido{
+    0%{ transform:translateX(-110%); }
+    100%{ transform:translateX(390%); }
+  }
+  @media (prefers-reduced-motion: reduce){ .loading-glow{ animation:none; width:100%; opacity:.5; } }
+  .loading-msg{ margin-top:12px; font-size:13px; line-height:18px; color:var(--ink-soft);
+    transition:opacity .3s cubic-bezier(0.32,0.72,0,1); min-height:18px; }
+  #loginError{ display:none; font-size:15px; line-height:20px; color:var(--rojo); font-weight:600;
+    margin-top:14px; background:var(--rojo-bg); border-radius:10px; padding:12px 14px; }
+  #loginError button{ display:block; margin:10px auto 0; border:none; cursor:pointer;
+    background:var(--rojo); color:#fff; font-size:14px; font-weight:600;
+    border-radius:999px; padding:8px 18px; }
+  #loginError button:active{ transform:scale(.96); }
+  #loginError .rastro{ font-size:12px; font-weight:400; opacity:.8; margin-top:6px; }
+  @media (prefers-color-scheme: dark){
+    :root{ --login-acento:#8dc63f; --login-rojo:#ff8a80; }
+  }
+  :root[data-theme="dark"]{ --login-acento:#8dc63f; --login-rojo:#ff8a80; }
+  :root[data-theme="light"]{ --login-acento:#4a7a1e; --login-rojo:#b3261e; }
+  .loading-glow{ background:linear-gradient(90deg, transparent, var(--login-acento, var(--brand-dark)) 50%, transparent); }
+  #loginError{ color:var(--login-rojo, var(--rojo)); }
+  #loginError button{ background:var(--rojo); }
 
   /* Aviso de version nueva: no se cierra solo, se queda hasta que se recarga. */
   #bannerVersion{ display:none; position:fixed; left:0; right:0; top:0; z-index:70;
@@ -175,12 +203,17 @@
 <button id="themeToggle" type="button" aria-label="Cambiar tema claro/oscuro"></button>
 
 <div id="loginScreen">
-  <div class="logo">GH</div>
-  <h1>Seguimiento de Mediciones</h1>
-  <p>GH Consultora · Mediciones y Monitoreos<br>Iniciá sesión con una cuenta de Google autorizada para ver el estado de cada servicio, del ingreso a la entrega.</p>
-  <div id="gsiButton"></div>
-  <div id="loginSpinner">Verificando acceso...</div>
-  <div id="loginError"></div>
+  <div class="login-card">
+    <img class="login-logo" src="logo_gh.png" alt="GH Consultora">
+    <h1>Seguimiento de Mediciones</h1>
+    <p>GH Consultora · Mediciones y Monitoreos<br>Iniciá sesión con una cuenta de Google autorizada para ver el estado de cada servicio, del ingreso a la entrega.</p>
+    <div id="gsiButton"></div>
+    <div id="loginSpinner">
+      <div class="loading-track"><div class="loading-glow"></div></div>
+      <div id="loadingMsg" class="loading-msg">Verificando tu acceso…</div>
+    </div>
+    <div id="loginError"></div>
+  </div>
 </div>
 
 <div id="dashboardScreen">
@@ -268,7 +301,7 @@
   // para que una pestaña vieja se entere sola de que hay una version mas
   // nueva, en vez de quedarse corriendo el codigo con el que cargo para
   // siempre. Mismo mecanismo que en Seguimiento Ambiental.
-  var FRONTEND_VERSION = '2026-09-25T14:10';
+  var FRONTEND_VERSION = '2026-10-09T13:53';
 
   var idToken = null;
   var SERVICIOS = [];
@@ -491,22 +524,64 @@
   document.addEventListener('visibilitychange', function () { if (!document.hidden) chequearVersionFrontend(); });
   document.getElementById('btnRecargarVersion').addEventListener('click', function () { location.reload(); });
 
+  // Mensajes que rotan mientras carga el panel, para que la espera se sienta más corta.
+  var MENSAJES_CARGA = [
+    'Verificando tu acceso…',
+    'Cargando los servicios activos…',
+    'Sincronizando el checklist…',
+    'Preparando el panel…',
+    'Ya casi está…'
+  ];
+  var cargaIntervalo = null;
+  var cargaTimeout = null;
+
+  function iniciarCargaVisual() {
+    var msg = document.getElementById('loadingMsg');
+    var i = 0;
+    document.getElementById('loginSpinner').style.display = 'block';
+    msg.style.opacity = 1;
+    msg.textContent = MENSAJES_CARGA[0];
+    clearInterval(cargaIntervalo);
+    clearTimeout(cargaTimeout);
+    cargaIntervalo = setInterval(function () {
+      i = (i + 1) % MENSAJES_CARGA.length;
+      msg.style.opacity = 0;
+      cargaTimeout = setTimeout(function () { msg.textContent = MENSAJES_CARGA[i]; msg.style.opacity = 1; }, 300);
+    }, 2200);
+  }
+
+  function detenerCargaVisual() {
+    clearInterval(cargaIntervalo);
+    clearTimeout(cargaTimeout);
+    cargaIntervalo = null;
+    cargaTimeout = null;
+    document.getElementById('loginSpinner').style.display = 'none';
+  }
+
   function handleCredentialResponse(response) {
     idToken = response.credential;
     document.getElementById('gsiButton').style.display = 'none';
-    document.getElementById('loginSpinner').style.display = 'block';
     document.getElementById('loginError').style.display = 'none';
+    iniciarCargaVisual();
+    intentarLogin(true);
+  }
 
+  // A veces el primer pedido falla solo (arranque en frío de Apps Script) y el
+  // segundo ya anda: por eso reintenta una vez en silencio antes de mostrar
+  // "cuenta no autorizada". Los reintentos por red los hace callBackend.
+  function intentarLogin(primerIntento) {
     callBackend('getData', {}).then(function (data) {
-      document.getElementById('loginSpinner').style.display = 'none';
       if (!data.ok) {
+        if (primerIntento) return intentarLogin(false);
+        detenerCargaVisual();
         idToken = null;
         document.getElementById('gsiButton').style.display = 'block';
         var err = document.getElementById('loginError');
-        err.textContent = 'Esta cuenta no está autorizada para ver el dashboard. Pedile a GH Consultora que agregue tu email a la lista.';
+        err.textContent = 'Esta cuenta no está autorizada. Pedile a GH Consultora que agregue tu email a la lista.';
         err.style.display = 'block';
         return;
       }
+      detenerCargaVisual();
       SERVICIOS = data.servicios;
       if (data.equipo) EQUIPO = data.equipo;
       if (data.responsablesFactura) RESPONSABLES_FACTURA = data.responsablesFactura;
@@ -519,12 +594,22 @@
       document.getElementById('dashboardScreen').style.display = 'block';
       render();
       cargarTemplatesCC();
-    }).catch(function () {
-      document.getElementById('loginSpinner').style.display = 'none';
+    }).catch(function (fallo) {
+      detenerCargaVisual();
       document.getElementById('gsiButton').style.display = 'block';
       var err = document.getElementById('loginError');
-      err.textContent = 'No se pudo conectar con el backend. Probá de nuevo en un momento.' + (ultimoFalloBackend ? ' (' + ultimoFalloBackend + ')' : '');
+      var causa = (fallo && fallo.name === 'AbortError')
+        ? 'El backend tardó demasiado en responder.'
+        : (fallo && fallo.name === 'RespuestaInvalida')
+          ? 'Google devolvió una respuesta inesperada.'
+          : 'No se pudo conectar con el backend.';
+      err.innerHTML = esc(causa) + ' Casi siempre se arregla recargando la página con la versión más nueva.' +
+        (ultimoFalloBackend ? '<div class="rastro">' + esc(ultimoFalloBackend) + '</div>' : '') +
+        '<button type="button" id="btnRecargarLogin">Recargar</button>';
       err.style.display = 'block';
+      document.getElementById('btnRecargarLogin').addEventListener('click', function () {
+        location.replace(location.pathname + '?recargar=' + Date.now());
+      });
     });
   }
 
