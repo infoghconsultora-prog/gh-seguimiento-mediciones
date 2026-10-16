@@ -146,7 +146,8 @@
     (equiposCal || []).forEach(function (e) { porCal[e.id] = e; });
     var peor = null;
     var equipos = Object.keys(eqIds).map(function (id) {
-      var def = ix.cat.equipos[id] || { nombre: id, cal: [] };
+      var nom = ix.cat.equipos[id];
+      var def = { nombre: (nom && nom.nombre) || nom || id, cal: (ix.cat.equiposCal && ix.cat.equiposCal[id]) || (nom && nom.cal) || [] };
       var fisicos = (def.cal || []).map(function (cid) {
         var e = porCal[cid]; var st = estadoEquipo(e, hoy);
         return { id: cid, equipo: e ? e.equipo : cid, marca: e ? e.marca : '', modelo: e ? e.modelo : '', fecha_venc: e ? e.fecha_venc : null,
@@ -172,11 +173,145 @@
     };
   }
 
+
+  /* ---------------- muestreo compartido ----------------
+     Dado el conjunto de fichas de un ítem, arma qué comparte medio de captación (filtro, tubo,
+     instrumento) y cuáles no, con la razón. Todo es SUGERENCIA: lo decide el técnico. */
+  function rangoCompartido(fichas, campo) {
+    var lo = -Infinity, hi = Infinity, hay = false;
+    fichas.forEach(function (p) {
+      var r = p[campo];
+      if (r && r.length === 2) { hay = true; lo = Math.max(lo, r[0]); hi = Math.min(hi, r[1]); }
+    });
+    return hay ? { lo: lo, hi: hi, ok: lo <= hi } : null;
+  }
+  function nf(n) { return Number(n).toLocaleString('es-AR', { maximumFractionDigits: 3 }); }
+
+  function agruparMuestreo(ix, fichaIds, opc) {
+    opc = opc || {};
+    var jornada = opc.jornada > 0 ? opc.jornada : 480;
+    var muestras = parseInt(opc.muestras, 10) > 0 ? parseInt(opc.muestras, 10) : 1;
+    var M = ix.cat.muestreo || { medios: {}, fichaMedios: {}, notas: {}, explicaciones: [], redundantes: [] };
+    var presentes = {};
+    fichaIds.forEach(function (id) { if (ix.porId[id]) presentes[id] = true; });
+
+    // lo que otro parámetro ya cubre no se muestrea aparte
+    var redundantes = [];
+    (M.redundantes || []).forEach(function (r) {
+      if (presentes[r.a] && presentes[r.b]) { redundantes.push(r); delete presentes[r.a]; }
+    });
+    var ids = Object.keys(presentes);
+
+    // 1) los que solo pueden ir en un medio lo fijan; los que admiten varios se suman a uno ya pedido
+    var pedidos = {};
+    ids.forEach(function (id) { var o = M.fichaMedios[id]; if (o && o.length === 1) pedidos[o[0]] = true; });
+    var medioDe = {};
+    ids.forEach(function (id) {
+      var o = M.fichaMedios[id];
+      if (!o || !o.length) { medioDe[id] = 'solo:' + id; return; }
+      var elegido = o.filter(function (m) { return pedidos[m]; })[0] || o[0];
+      medioDe[id] = elegido; pedidos[elegido] = true;
+    });
+
+    var porMedio = {}, orden = [];
+    ids.forEach(function (id) {
+      var m = medioDe[id];
+      if (!porMedio[m]) { porMedio[m] = []; orden.push(m); }
+      porMedio[m].push(ix.porId[id]);
+    });
+
+    var grupos = [];
+    orden.forEach(function (mid) {
+      var fichas = porMedio[mid];
+      var def = M.medios[mid];
+      var solo = mid.indexOf('solo:') === 0;
+      var nombre = def ? def.nombre : (fichas[0].medio || fichas[0].nombre);
+      var conCaudal = fichas.some(function (p) { return p.caudal; });
+      var bomba = def ? def.bomba : conCaudal;
+      var g = { medio: mid, nombre: nombre, fichas: fichas.map(function (p) { return p.id; }), nombresFichas: fichas.map(function (p) { return p.nombre; }),
+        compartido: fichas.length > 1, bomba: bomba, avisos: [], notas: [], estado: 'ok' };
+
+      if (bomba && conCaudal) {
+        // Límite duro: el caudal (lo fija el equipo o el ciclón). Los rangos de volumen de los métodos son
+        // de referencia según la concentración esperada: solo generan avisos.
+        var q = rangoCompartido(fichas, 'caudal');
+        var tFijos = fichas.map(function (p) { return p.tiempo; }).filter(Boolean);
+        var t = tFijos.length ? Math.max.apply(null, tFijos) : jornada;
+        g.tiempo = t;
+        if (q && !q.ok) {
+          g.estado = 'no_compatible';
+          g.avisos.push('Los caudales de los métodos no se superponen (' + fichas.map(function (p) { return p.nombre + ': ' + (p.caudal ? nf(p.caudal[0]) + '–' + nf(p.caudal[1]) : 'sin dato') + ' L/min'; }).join(' · ') + '): hay que usar un medio para cada uno.');
+        } else if (q) {
+          g.caudal = { min: q.lo, max: q.hi };
+          // caudal: el que deja el volumen dentro del rango de todos; si no hay, el más cercano
+          var v = rangoCompartido(fichas, 'vol');
+          var qIdeal = q.lo === q.hi ? q.lo : (q.lo + q.hi) / 2;
+          if (v && v.ok && q.lo !== q.hi) {
+            var a1 = Math.max(q.lo, v.lo / t), b1 = Math.min(q.hi, v.hi / t);
+            qIdeal = a1 <= b1 ? (a1 + b1) / 2 : (v.hi / t < q.lo ? q.lo : q.hi);
+          }
+          qIdeal = Math.round(qIdeal * 1000) / 1000;
+          var vol = Math.round(qIdeal * t * 10) / 10;
+          g.sugerido = { caudal: qIdeal, tiempo: t, volumen: vol };
+          if (tFijos.length) g.avisos.push('El tiempo (' + nf(t) + ' min) lo recomienda el método.');
+          // contraste contra el rango de referencia de cada método
+          fichas.forEach(function (p) {
+            if (!p.vol) return;
+            if (vol < p.vol[0]) g.avisos.push(p.nombre + ': con ' + nf(vol) + ' L no llega al volumen mínimo de referencia del método (' + nf(p.vol[0]) + ' L). Hace falta ' + nf(Math.ceil(p.vol[0] / q.hi)) + ' min como mínimo a ' + nf(q.hi) + ' L/min.');
+            else if (vol > p.vol[1]) g.avisos.push(p.nombre + ': ' + nf(vol) + ' L supera el máximo de referencia (' + nf(p.vol[1]) + ' L, calculado para una concentración alta). Es válido si la concentración es baja; si no, se satura' + (!tFijos.length ? ' (o limitar el muestreo a ' + nf(Math.floor(p.vol[1] / q.lo)) + ' min a ' + nf(q.lo) + ' L/min)' : '') + '.');
+          });
+          var conMasa = fichas.filter(function (p) { return p.masa; })[0];
+          if (conMasa) {
+            g.concentracionMaxima = { valor: Math.round(conMasa.masa[1] / (vol / 1000) * 100) / 100, unidad: 'mg/m³' };
+            g.avisos.push('Con ' + nf(vol) + ' L el filtro admite hasta ' + nf(conMasa.masa[1]) + ' mg de polvo: si la concentración supera ' + nf(g.concentracionMaxima.valor) + ' mg/m³ el filtro se satura y hay que cambiarlo durante la jornada.');
+          }
+        }
+      }
+      if (bomba && g.compartido && g.estado !== 'no_compatible' &&
+          fichas.some(function (p) { return /Tabla/i.test((p.notas || '') + ' ' + (p.limite || '')); })) {
+        g.avisos.push('Algunos métodos dan el caudal y el volumen según el compuesto o el elemento (Tabla del método): confirmar antes de fijar el tiempo.');
+      }
+      if (g.compartido || mid === 'directa' || mid === 'isocinetico') {
+        (M.notas[mid] || []).forEach(function (n) { g.notas.push(n); });
+      }
+      g.muestras = muestras;
+      grupos.push(g);
+    });
+
+    // los que no pudieron compartir por caudal/volumen pasan a ir uno por uno
+    var finales = [];
+    grupos.forEach(function (g) {
+      if (g.estado === 'no_compatible') {
+        g.fichas.forEach(function (id, i) {
+          var p = ix.porId[id];
+          finales.push({ medio: g.medio, nombre: g.nombre, fichas: [id], nombresFichas: [p.nombre], compartido: false, bomba: g.bomba, avisos: i === 0 ? g.avisos : [], notas: [], estado: 'ok', muestras: muestras,
+            caudal: p.caudal ? { min: p.caudal[0], max: p.caudal[1] } : null });
+        });
+      } else finales.push(g);
+    });
+
+    // por qué no comparten (solo pares presentes en el ítem y en grupos distintos)
+    var grupoDe = {};
+    finales.forEach(function (g, i) { g.fichas.forEach(function (id) { grupoDe[id] = i; }); });
+    var noComparten = (M.explicaciones || []).filter(function (e) {
+      return e.a in grupoDe && e.b in grupoDe && grupoDe[e.a] !== grupoDe[e.b];
+    });
+
+    var fisicos = finales.filter(function (g) { return g.medio !== 'directa'; });
+    var sinCompartir = ids.filter(function (id) { return medioDe[id] !== 'directa'; }).length;
+    var blancos = Math.max(2, Math.ceil(muestras * 0.1));
+    return {
+      grupos: finales, noComparten: noComparten, redundantes: redundantes, blancos: blancos, muestras: muestras,
+      resumen: { mediosSinCompartir: sinCompartir, mediosCompartiendo: fisicos.length,
+        bombas: finales.filter(function (g) { return g.bomba; }).length, jornada: jornada }
+    };
+  }
+
   function planDeServicio(ix, items, equiposCal, correcciones, hoy) {
     return (items || []).map(function (it) { return planDeItem(ix, it, equiposCal, correcciones, hoy); });
   }
 
   var API = { claveFila: claveFila, norm: norm, compacto: compacto, indexar: indexar, cruzarFila: cruzarFila, cruzarTitulo: cruzarTitulo,
-    planDeItem: planDeItem, planDeServicio: planDeServicio, estadoEquipo: estadoEquipo };
+    planDeItem: planDeItem, agruparMuestreo: agruparMuestreo, planDeServicio: planDeServicio, estadoEquipo: estadoEquipo };
   if (typeof module !== 'undefined' && module.exports) module.exports = API; else global.GHPlan = API;
 })(typeof window !== 'undefined' ? window : this);

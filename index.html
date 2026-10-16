@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dashboard de Seguimiento de Mediciones — GH Consultora</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="plan.js?v=2026-10-16T04:08"></script>
+<script src="plan.js?v=2026-10-16T04:50"></script>
 <style>
   :root{
     --verde:      #4c9a2a; --verde-bg:   #eaf4e2;
@@ -88,6 +88,22 @@
   .plan-cols a:hover{text-decoration:underline;}
   .plan-cols .falta{color:var(--rojo);font-weight:600;}
   .plan-cols .sub{font-size:11px;color:var(--ink-soft);}
+  .muestreo{margin-top:12px;border-top:1px dashed var(--line);padding-top:10px;}
+  .muestreo h6{margin:0 0 6px;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);}
+  .m-resumen{font-size:12px;color:var(--ink-soft);margin:0 0 8px;}
+  .m-resumen b{color:var(--ink);}
+  .m-grupo{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12px;}
+  .m-grupo.comparte{border-color:var(--verde);background:var(--verde-bg);}
+  .m-grupo .m-titulo{font-weight:700;display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+  .m-grupo .m-sug{margin:4px 0;font-weight:600;}
+  .m-grupo ul{margin:4px 0 0;padding-left:16px;}
+  .m-grupo li{margin:2px 0;}
+  .m-grupo li.av{color:var(--amarillo);}
+  .m-grupo li .fu{color:var(--ink-soft);font-size:11px;}
+  .m-no{font-size:12px;margin:3px 0;}
+  .m-no .fu{color:var(--ink-soft);font-size:11px;}
+  .m-jornada{font-size:12px;color:var(--ink-soft);display:flex;gap:6px;align-items:center;margin:0 0 10px;}
+  .m-jornada input{width:70px;font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);}
   @media (max-width:640px){
     .plan-filas thead{display:none;}
     .plan-filas, .plan-filas tbody, .plan-filas tr, .plan-filas td{display:block;width:100%;}
@@ -346,7 +362,7 @@
   // para que una pestaña vieja se entere sola de que hay una version mas
   // nueva, en vez de quedarse corriendo el codigo con el que cargo para
   // siempre. Mismo mecanismo que en Seguimiento Ambiental.
-  var FRONTEND_VERSION = '2026-10-16T04:08';
+  var FRONTEND_VERSION = '2026-10-16T04:50';
 
   var idToken = null;
   var SERVICIOS = [];
@@ -1027,7 +1043,7 @@
   }
 
   function planEstado_(key) {
-    if (!PLAN_ESTADO[key]) PLAN_ESTADO[key] = { abierto: false, cargando: false, items: undefined, correcciones: {}, error: '', editando: {} };
+    if (!PLAN_ESTADO[key]) PLAN_ESTADO[key] = { abierto: false, cargando: false, items: undefined, correcciones: {}, error: '', editando: {}, jornada: 480 };
     return PLAN_ESTADO[key];
   }
 
@@ -1094,6 +1110,40 @@
 
   var CONFIANZA_BADGE = { alta: ['verde', 'Seguro'], confirmada: ['azul', 'Confirmado'], media: ['amarillo', 'Revisar'], ninguna: ['rojo', 'Sin ficha'] };
 
+
+  function nfa_(n) { return Number(n).toLocaleString('es-AR', { maximumFractionDigits: 3 }); }
+
+  // Qué se puede compartir en el muestreo (filtro, tubo, instrumento) y qué no, con la razón.
+  function dibujarMuestreo_(it, st) {
+    if (!it.fichas || !it.fichas.length || !CATALOGO.muestreo) return '';
+    var m = GHPlan.agruparMuestreo(CATALOGO_IX, it.fichas, { jornada: st.jornada, muestras: it.muestras });
+    var nombreDe = function (id) { return CATALOGO_IX.porId[id] ? CATALOGO_IX.porId[id].nombre : id; };
+    var grupos = m.grupos.map(function (g) {
+      var comparte = g.compartido && g.estado !== 'no_compatible';
+      var items = g.avisos.map(function (a) { return '<li class="av">' + esc(a) + '</li>'; }).join('') +
+        g.notas.map(function (n) { return '<li>' + esc(n.texto) + ' <span class="fu">[' + esc(n.fuente) + ']</span></li>'; }).join('');
+      return '<div class="m-grupo' + (comparte ? ' comparte' : '') + '"><div class="m-titulo">' +
+        (comparte ? '<span class="badge verde">Comparten</span>' : '') + esc(g.nombre) + '</div>' +
+        '<div>' + g.nombresFichas.map(esc).join(' + ') + '</div>' +
+        (g.sugerido ? '<div class="m-sug">Bomba a ' + nfa_(g.sugerido.caudal) + ' L/min durante ' + nfa_(g.sugerido.tiempo) + ' min = ' + nfa_(g.sugerido.volumen) + ' L</div>' : '') +
+        (g.bomba ? '' : '<div class="m-sug">Sin bomba: lectura en el momento</div>') +
+        (items ? '<ul>' + items + '</ul>' : '') + '</div>';
+    }).join('');
+    var no = m.noComparten.map(function (e) {
+      return '<div class="m-no"><b>' + esc(nombreDe(e.a)) + ' / ' + esc(nombreDe(e.b)) + '</b> — ' + esc(e.razon) + ' <span class="fu">[' + esc(e.fuente) + ']</span></div>';
+    }).join('');
+    var red = m.redundantes.map(function (e) {
+      return '<div class="m-no"><b>' + esc(nombreDe(e.a)) + '</b> ya sale con ' + esc(nombreDe(e.b)) + ' — ' + esc(e.razon) + ' <span class="fu">[' + esc(e.fuente) + ']</span></div>';
+    }).join('');
+    var r = m.resumen;
+    return '<div class="muestreo"><h6>Muestreo: qué se puede compartir</h6>' +
+      '<p class="m-resumen">Por cada puesto: <b>' + r.mediosCompartiendo + '</b> medio(s) de captación' +
+      (r.mediosSinCompartir !== r.mediosCompartiendo ? ' en vez de ' + r.mediosSinCompartir + ' si no se comparte' : '') +
+      ' · <b>' + r.bombas + '</b> bomba(s) · ' + m.muestras + ' puesto(s) → ' + (m.muestras) + ' medio(s) de cada tipo, más al menos <b>' + m.blancos + '</b> blancos de campo por lote. ' +
+      'Son sugerencias: la decisión es del técnico y del laboratorio.</p>' + grupos +
+      ((no || red) ? '<h6 style="margin-top:10px">No comparten</h6>' + no + red : '') + '</div>';
+  }
+
   function dibujarPlanItem_(it, key, st) {
     var filas = it.filas.map(function (f) {
       var fichaNombre = f.ficha ? CATALOGO_IX.porId[f.ficha].nombre : '';
@@ -1136,7 +1186,7 @@
       (it.dudosas ? ' <span class="badge amarillo">' + it.dudosas + ' para revisar</span>' : '') + '</h5>' +
       (it.filas.length ? tabla : '') +
       (conocidas ? '<div class="plan-cols"><div><h6>Métodos</h6>' + metodos + '<h6 style="margin-top:10px">Procedimientos GH</h6>' + procs + (legis ? '<h6 style="margin-top:10px">Legislación</h6>' + legis : '') + '</div>' +
-        '<div><h6>Equipos y calibración</h6>' + equipos + cc + '</div></div>' : '<p class="plan-nota">No se encontró ninguna ficha para este ítem: elegí la que corresponde arriba.</p>') + '</div>';
+        '<div><h6>Equipos y calibración</h6>' + equipos + cc + '</div></div>' + dibujarMuestreo_(it, st) : '<p class="plan-nota">No se encontró ninguna ficha para este ítem: elegí la que corresponde arriba.</p>') + '</div>';
   }
 
   function buildPlanTecnico_(s, key) {
@@ -1184,7 +1234,7 @@
         } else if (s.checklist && s.checklist.cotizacionUrl) {
           aviso = '<p class="plan-nota">Armado con las filas de la cotización. Si la cotización cambió, <button type="button" class="mini" data-leer="1">volver a leerla</button>. Lo que confirmes queda guardado para todas las cotizaciones.</p>';
         }
-        body.innerHTML = aviso + plan.map(function (it) { return dibujarPlanItem_(it, key, st); }).join('');
+        body.innerHTML = aviso + '<label class="m-jornada">Jornada de muestreo: <input type="number" min="1" step="10" data-jornada="1" value="' + st.jornada + '"> min</label>' + plan.map(function (it) { return dibujarPlanItem_(it, key, st); }).join('');
       }
     }
     cont.appendChild(body);
@@ -1197,6 +1247,10 @@
     });
     cont.addEventListener('change', function (ev) {
       var t = ev.target;
+      if (t.getAttribute && t.getAttribute('data-jornada')) {
+        var j = parseInt(t.value, 10);
+        st.jornada = j > 0 ? j : 480; render(); return;
+      }
       if (!t.getAttribute || !t.getAttribute('data-fila')) return;
       var clave = t.getAttribute('data-fila');
       // la fila se busca por su clave dentro del plan que se está mostrando
