@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dashboard de Seguimiento de Mediciones — GH Consultora</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="plan.js?v=2026-10-16T04:07"></script>
 <style>
   :root{
     --verde:      #4c9a2a; --verde-bg:   #eaf4e2;
@@ -59,6 +60,50 @@
   .loading-glow{ background:linear-gradient(90deg, transparent, var(--login-acento, var(--brand-dark)) 50%, transparent); }
   #loginError{ color:var(--login-rojo, var(--rojo)); }
   #loginError button{ background:var(--rojo); }
+
+
+  /* ---------- plan técnico (cruce cotización ↔ Biblioteca ↔ Calibraciones) ---------- */
+  .plan{border:1px solid var(--line);border-radius:10px;margin-bottom:16px;background:var(--card);}
+  .plan-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 14px;cursor:pointer;}
+  .plan-head h4{margin:0;font-size:13px;font-weight:700;flex:1 1 auto;}
+  .plan-head .chev{color:var(--ink-soft);transition:transform .2s;}
+  .plan.abierto .chev{transform:rotate(90deg);}
+  .plan-body{display:none;border-top:1px solid var(--line);padding:12px 14px;}
+  .plan.abierto .plan-body{display:block;}
+  .plan-nota{font-size:12px;color:var(--ink-soft);margin:0 0 10px;}
+  .plan-item{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:10px;}
+  .plan-item h5{margin:0 0 8px;font-size:13px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .plan-item h5 span{font-weight:500;color:var(--ink-soft);font-size:12px;}
+  .plan-filas{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;}
+  .plan-filas th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-soft);padding:4px 6px;border-bottom:1px solid var(--line);}
+  .plan-filas td{padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top;}
+  .plan-filas tr:last-child td{border-bottom:none;}
+  .plan-filas select{max-width:100%;font-size:12px;padding:3px 4px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);}
+  .plan-filas .motivo{font-size:11px;color:var(--ink-soft);}
+  .plan-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:6px;}
+  .plan-cols h6{margin:0 0 5px;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);}
+  .plan-cols ul{margin:0;padding:0;list-style:none;font-size:12px;}
+  .plan-cols li{padding:3px 0;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap;}
+  .plan-cols a{color:var(--brand-dark);font-weight:600;text-decoration:none;}
+  .plan-cols a:hover{text-decoration:underline;}
+  .plan-cols .falta{color:var(--rojo);font-weight:600;}
+  .plan-cols .sub{font-size:11px;color:var(--ink-soft);}
+  @media (max-width:640px){
+    .plan-filas thead{display:none;}
+    .plan-filas, .plan-filas tbody, .plan-filas tr, .plan-filas td{display:block;width:100%;}
+    .plan-filas tr{padding:7px 0;border-bottom:1px solid var(--line);}
+    .plan-filas tr:last-child{border-bottom:none;}
+    .plan-filas td{border:none;padding:2px 0;}
+    .plan-filas td:nth-child(1){font-weight:600;}
+    .plan-filas td:nth-child(2){color:var(--ink-soft);}
+    .plan-filas td:nth-child(2)::before{content:"Método cotizado: ";}
+    .plan-filas select{width:100%;}
+    .plan-body{padding:10px;}
+  }
+  .plan .mini{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:6px;font-size:11px;padding:2px 8px;cursor:pointer;}
+  @media (prefers-color-scheme: dark){ .plan-cols a{color:#8dc63f;} }
+  :root[data-theme="dark"] .plan-cols a{color:#8dc63f;}
+  :root[data-theme="light"] .plan-cols a{color:var(--brand-dark);}
 
   /* Aviso de version nueva: no se cierra solo, se queda hasta que se recarga. */
   #bannerVersion{ display:none; position:fixed; left:0; right:0; top:0; z-index:70;
@@ -301,7 +346,7 @@
   // para que una pestaña vieja se entere sola de que hay una version mas
   // nueva, en vez de quedarse corriendo el codigo con el que cargo para
   // siempre. Mismo mecanismo que en Seguimiento Ambiental.
-  var FRONTEND_VERSION = '2026-10-09T13:53';
+  var FRONTEND_VERSION = '2026-10-16T04:07';
 
   var idToken = null;
   var SERVICIOS = [];
@@ -583,6 +628,7 @@
       }
       detenerCargaVisual();
       SERVICIOS = data.servicios;
+      if (data.equiposCal) EQUIPOS_CAL = data.equiposCal;
       if (data.equipo) EQUIPO = data.equipo;
       if (data.responsablesFactura) RESPONSABLES_FACTURA = data.responsablesFactura;
       if (data.avisoColumnas && data.avisoColumnas.length) {
@@ -594,6 +640,7 @@
       document.getElementById('dashboardScreen').style.display = 'block';
       render();
       cargarTemplatesCC();
+      cargarCatalogo_().catch(function () { /* se reintenta al abrir el plan técnico */ });
     }).catch(function (fallo) {
       detenerCargaVisual();
       document.getElementById('gsiButton').style.display = 'block';
@@ -755,6 +802,7 @@
       btn.disabled = false;
       if (!respuestaOk(data, 'No se pudo actualizar')) return;
       SERVICIOS = data.servicios;
+      if (data.equiposCal) EQUIPOS_CAL = data.equiposCal;
       if (data.equipo) EQUIPO = data.equipo;
       if (data.responsablesFactura) RESPONSABLES_FACTURA = data.responsablesFactura;
       if (data.avisoColumnas && data.avisoColumnas.length) {
@@ -934,6 +982,7 @@
       var body = document.createElement('div');
       body.className = 'servicio-body';
       if (s.mediciones.length) body.appendChild(buildMedicionesTable_(s));
+      if (s.mediciones.length) body.appendChild(buildPlanTecnico_(s, key));
       body.appendChild(buildChecklist_(s, key));
       div.appendChild(body);
 
@@ -946,6 +995,216 @@
     document.getElementById('stRevision').textContent = counts.revision;
     document.getElementById('stEntregado').textContent = counts.entregado;
     document.querySelectorAll('.stat').forEach(function (el) { el.classList.toggle('active', el.dataset.filter === currentFilter); });
+  }
+
+
+  /* ---------- plan técnico ---------- */
+  var EQUIPOS_CAL = [];
+  var CATALOGO = null, CATALOGO_IX = null, CATALOGO_PROMESA = null;
+  var PLAN_ESTADO = {};   // por servicio: { abierto, cargando, items, correcciones, error, editando:{} }
+  var PLAN_ESTADO_LABEL = { verde: 'Vigente', amarillo: 'Vence en menos de 90 días', naranja: 'Vence en menos de 60 días',
+    rojo: 'Vencido', gris: 'Sin fecha de calibración', sin_dato: 'Sin dato en Calibraciones', sin_equipo: 'No requiere equipo calibrado' };
+  var PLAN_ESTADO_COLOR = { verde: 'verde', amarillo: 'amarillo', naranja: 'naranja', rojo: 'rojo', gris: 'gris', sin_dato: 'gris', sin_equipo: 'azul' };
+
+  function urlDrive_(id) { return 'https://drive.google.com/file/d/' + encodeURIComponent(id) + '/view'; }
+
+  // El catálogo (fichas de la Biblioteca) se baja una vez y queda guardado en el navegador; el backend
+  // solo lo vuelve a mandar si cambió.
+  function cargarCatalogo_() {
+    if (CATALOGO_IX) return Promise.resolve();
+    if (CATALOGO_PROMESA) return CATALOGO_PROMESA;
+    var guardado = null;
+    try { guardado = JSON.parse(localStorage.getItem('ghCatalogoPlan') || 'null'); } catch (e) { guardado = null; }
+    CATALOGO_PROMESA = callBackend('getCatalogo', { version: guardado && guardado.version }).then(function (data) {
+      if (!data || !data.ok) throw new Error((data && data.error) || 'catalogo');
+      var cat = (data.igual && guardado) ? guardado.catalogo : data.catalogo;
+      if (!cat) throw new Error('catalogo_vacio');
+      if (!data.igual) { try { localStorage.setItem('ghCatalogoPlan', JSON.stringify({ version: data.version, catalogo: cat })); } catch (e) { /* sin espacio: se baja de nuevo la próxima vez */ } }
+      CATALOGO = cat;
+      CATALOGO_IX = GHPlan.indexar(cat);
+    }).catch(function (err) { CATALOGO_PROMESA = null; throw err; });
+    return CATALOGO_PROMESA;
+  }
+
+  function planEstado_(key) {
+    if (!PLAN_ESTADO[key]) PLAN_ESTADO[key] = { abierto: false, cargando: false, items: undefined, correcciones: {}, error: '', editando: {} };
+    return PLAN_ESTADO[key];
+  }
+
+  function cargarPlan_(key) {
+    var st = planEstado_(key);
+    if (st.cargando) return;
+    st.cargando = true; st.error = '';
+    render();
+    Promise.all([cargarCatalogo_(), callBackend('getPlan', { clave: key })]).then(function (r) {
+      var d = r[1];
+      st.cargando = false;
+      if (!d || !d.ok) { st.error = 'No se pudo leer el plan (' + ((d && d.error) || 'error') + ').'; render(); return; }
+      st.items = d.items; st.correcciones = d.correcciones || {};
+      render();
+    }).catch(function () {
+      st.cargando = false; st.error = 'No se pudo cargar el catálogo de la Biblioteca. Probá de nuevo en un momento.'; render();
+    });
+  }
+
+  function leerCotizacionDe_(key) {
+    var st = planEstado_(key);
+    st.cargando = true; st.error = ''; render();
+    callBackend('reprocesarCotizacion', { clave: key }).then(function (d) {
+      st.cargando = false;
+      if (!d || !d.ok) {
+        st.error = d && d.error === 'el_servicio_no_tiene_cotizacion' ? 'Este servicio no tiene cotización cargada en el panel.'
+          : 'No se pudo leer la cotización (' + ((d && d.error) || 'error') + ').';
+        render(); return;
+      }
+      st.items = d.items; st.correcciones = d.correcciones || st.correcciones; render();
+    }).catch(function () { st.cargando = false; st.error = 'No se pudo conectar con el backend.'; render(); });
+  }
+
+  function confirmarFichaFila_(key, fila, ficha) {
+    var st = planEstado_(key);
+    var clave = GHPlan.claveFila(fila);
+    if (ficha) st.correcciones[clave] = ficha; else delete st.correcciones[clave];
+    st.editando[clave] = false;
+    render();
+    callBackend('confirmarFicha', { clave: clave, ficha: ficha }).then(function (d) {
+      if (d && d.ok && d.correcciones) { st.correcciones = d.correcciones; render(); }
+      else avisar('No se pudo guardar la corrección.', 'error');
+    }).catch(function () { avisar('No se pudo guardar la corrección: sin conexión con el backend.', 'error'); });
+  }
+
+  function opcionesFicha_(seleccionada) {
+    var grupos = {}, orden = [];
+    CATALOGO.parametros.forEach(function (p) { if (!grupos[p.grupo]) { grupos[p.grupo] = []; orden.push(p.grupo); } grupos[p.grupo].push(p); });
+    return '<option value="">— elegir ficha —</option>' + orden.map(function (g) {
+      return '<optgroup label="' + esc(g) + '">' + grupos[g].map(function (p) {
+        return '<option value="' + esc(p.id) + '"' + (p.id === seleccionada ? ' selected' : '') + '>' + esc(p.nombre) + '</option>';
+      }).join('') + '</optgroup>';
+    }).join('');
+  }
+
+  function docLink_(d) {
+    if (d.faltante) return '<span class="falta">' + esc(d.codigo) + ' — no está en el Drive</span>';
+    var txt = esc(d.codigo) + (d.titulo ? ' <span class="sub">' + esc(d.titulo) + '</span>' : '');
+    var l = d.driveId ? '<a href="' + urlDrive_(d.driveId) + '" target="_blank" rel="noopener">' + esc(d.codigo) + '</a>' +
+      (d.titulo ? ' <span class="sub">' + esc(d.titulo) + (d.etiqueta ? ' · ' + esc(d.etiqueta) : '') + '</span>' : '') : txt;
+    if (d.reemplazadoPor) l += ' <span class="badge naranja">reemplazado por ' + esc(d.reemplazadoPor) + '</span>';
+    return l;
+  }
+
+  var CONFIANZA_BADGE = { alta: ['verde', 'Seguro'], confirmada: ['azul', 'Confirmado'], media: ['amarillo', 'Revisar'], ninguna: ['rojo', 'Sin ficha'] };
+
+  function dibujarPlanItem_(it, key, st) {
+    var filas = it.filas.map(function (f) {
+      var fichaNombre = f.ficha ? CATALOGO_IX.porId[f.ficha].nombre : '';
+      var conf = f.ignorada ? null : CONFIANZA_BADGE[f.confianza];
+      var clave = GHPlan.claveFila(f);
+      var editando = !!st.editando[clave];
+      var celda;
+      if (f.ignorada) celda = '<span class="motivo">' + esc(f.motivo || 'no es una medición') + '</span>';
+      else if (f.confianza === 'alta' && !editando) {
+        celda = esc(fichaNombre) + ' <button type="button" class="mini" data-cambiar="' + esc(clave) + '">cambiar</button>';
+      } else {
+        celda = '<select data-fila="' + esc(clave) + '">' + opcionesFicha_(f.ficha) + '</select>' +
+          (f.ficha && !editando ? '<div class="motivo">Propuesta: ' + esc(fichaNombre) + ' · ' + esc(f.motivo) + '</div>' : '') +
+          (!f.ficha ? '<div class="motivo">' + esc(f.motivo) + '</div>' : '');
+      }
+      return { f: f, clave: clave, html: '<tr><td>' + esc(f.parametro) + '</td><td>' + esc(f.metodologia || '—') + '</td><td>' + celda + '</td><td>' +
+        (conf ? '<span class="badge ' + conf[0] + '">' + conf[1] + '</span>' : '') + '</td></tr>' };
+    });
+
+    var estadoBadge = '<span class="badge ' + (PLAN_ESTADO_COLOR[it.estado] || 'gris') + '">' + esc(PLAN_ESTADO_LABEL[it.estado] || it.estado) + '</span>';
+    var conocidas = it.filas.length && it.filas.some(function (f) { return f.ficha; });
+    var tabla = '<table class="plan-filas"><thead><tr><th>Parámetro cotizado</th><th>Método cotizado</th><th>Ficha de la Biblioteca</th><th></th></tr></thead><tbody>' +
+      filas.map(function (x) { return x.html; }).join('') + '</tbody></table>';
+
+    var metodos = it.metodos.length ? '<ul>' + it.metodos.map(function (m) { return '<li>' + docLink_(m) + '</li>'; }).join('') + '</ul>' : '<p class="sub">Sin método en la Biblioteca.</p>';
+    var procs = it.procedimientos.length ? '<ul>' + it.procedimientos.map(function (m) { return '<li>' + docLink_(m) + '</li>'; }).join('') + '</ul>' : '<p class="sub">Sin procedimiento GH asociado.</p>';
+    var legis = it.legislacion.length ? '<ul>' + it.legislacion.map(function (m) { return '<li>' + docLink_(m) + '</li>'; }).join('') + '</ul>' : '';
+    var equipos = it.equipos.length ? '<ul>' + it.equipos.map(function (e) {
+      var detalle = e.fisicos.map(function (x) {
+        return '<div class="sub">' + esc(x.equipo) + (x.modelo && x.modelo !== '-' ? ' ' + esc(x.modelo) : '') +
+          (x.fecha_venc ? ' · vence ' + esc(x.fecha_venc) : ' · sin fecha') +
+          (x.certificado ? ' · <a href="' + urlDrive_(x.certificado) + '" target="_blank" rel="noopener">certificado</a>' : '') + '</div>';
+      }).join('');
+      return '<li><span><span class="badge ' + (PLAN_ESTADO_COLOR[e.estado] || 'gris') + '">' + esc(PLAN_ESTADO_LABEL[e.estado] || e.estado) + '</span> ' + esc(e.nombre) + detalle + '</span></li>';
+    }).join('') + '</ul>' : '<p class="sub">No requiere equipos calibrados.</p>';
+    var cc = it.planillasCC.length ? '<h6 style="margin-top:10px">Cadena de custodia</h6><ul>' + it.planillasCC.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>' : '';
+
+    return '<div class="plan-item"><h5>' + esc(it.titulo || 'Ítem') + (it.muestras ? ' <span>' + esc(it.muestras) + ' muestra(s)</span>' : '') + ' ' + estadoBadge +
+      (it.sinFicha ? ' <span class="badge rojo">' + it.sinFicha + ' sin ficha</span>' : '') +
+      (it.dudosas ? ' <span class="badge amarillo">' + it.dudosas + ' para revisar</span>' : '') + '</h5>' +
+      (it.filas.length ? tabla : '') +
+      (conocidas ? '<div class="plan-cols"><div><h6>Métodos</h6>' + metodos + '<h6 style="margin-top:10px">Procedimientos GH</h6>' + procs + (legis ? '<h6 style="margin-top:10px">Legislación</h6>' + legis : '') + '</div>' +
+        '<div><h6>Equipos y calibración</h6>' + equipos + cc + '</div></div>' : '<p class="plan-nota">No se encontró ninguna ficha para este ítem: elegí la que corresponde arriba.</p>') + '</div>';
+  }
+
+  function buildPlanTecnico_(s, key) {
+    var st = planEstado_(key);
+    var cont = document.createElement('div');
+    cont.className = 'plan' + (st.abierto ? ' abierto' : '');
+
+    // Con el plan cerrado igual se muestra el resumen si ya se calculó
+    var resumen = '';
+    var items = null;
+    if (st.abierto || st.items !== undefined) {
+      if (CATALOGO_IX) {
+        items = st.items && st.items.length ? st.items
+          : (s.mediciones || []).filter(function (m) { return m.tipoMuestra; }).map(function (m) { return { titulo: m.tipoMuestra, muestras: m.cantidadMuestras, filas: [] }; });
+      }
+    }
+    var plan = items && CATALOGO_IX ? GHPlan.planDeServicio(CATALOGO_IX, items, EQUIPOS_CAL, st.correcciones) : null;
+    if (plan) {
+      var ORD = ['rojo', 'naranja', 'amarillo', 'gris', 'verde'], peor = null, sin = 0, dud = 0;
+      plan.forEach(function (p) { sin += p.sinFicha; dud += p.dudosas; if (p.estado !== 'sin_dato' && p.estado !== 'sin_equipo' && (peor === null || ORD.indexOf(p.estado) < ORD.indexOf(peor))) peor = p.estado; });
+      resumen = (peor ? '<span class="badge ' + PLAN_ESTADO_COLOR[peor] + '">' + esc(PLAN_ESTADO_LABEL[peor]) + '</span> ' : '') +
+        (sin ? '<span class="badge rojo">' + sin + ' sin ficha</span> ' : '') + (dud ? '<span class="badge amarillo">' + dud + ' para revisar</span>' : '');
+    }
+
+    var head = document.createElement('div');
+    head.className = 'plan-head';
+    head.innerHTML = '<span class="chev">▶</span><h4>Plan técnico <span style="font-weight:500;color:var(--ink-soft)">· métodos, equipos y calibración</span></h4>' + resumen;
+    head.addEventListener('click', function () {
+      st.abierto = !st.abierto;
+      if (st.abierto && st.items === undefined && !st.cargando) cargarPlan_(key); else render();
+    });
+    cont.appendChild(head);
+
+    var body = document.createElement('div');
+    body.className = 'plan-body';
+    if (st.abierto) {
+      if (st.cargando) body.innerHTML = '<p class="plan-nota">Cargando el plan técnico…</p>';
+      else if (st.error) body.innerHTML = '<p class="plan-nota" style="color:var(--rojo)">' + esc(st.error) + '</p>' +
+        '<button type="button" class="btn" data-reintentar="1">Reintentar</button>';
+      else if (plan) {
+        var aviso = '';
+        if (!st.items || !st.items.length) {
+          aviso = '<p class="plan-nota">Este plan se armó solo con los títulos de la cotización. ' +
+            (s.checklist && s.checklist.cotizacionUrl ? 'Para verlo parámetro por parámetro, leé la cotización: <button type="button" class="btn" data-leer="1">Leer la cotización</button>' : 'Cargá la cotización para verlo parámetro por parámetro.') + '</p>';
+        } else if (s.checklist && s.checklist.cotizacionUrl) {
+          aviso = '<p class="plan-nota">Armado con las filas de la cotización. Si la cotización cambió, <button type="button" class="mini" data-leer="1">volver a leerla</button>. Lo que confirmes queda guardado para todas las cotizaciones.</p>';
+        }
+        body.innerHTML = aviso + plan.map(function (it) { return dibujarPlanItem_(it, key, st); }).join('');
+      }
+    }
+    cont.appendChild(body);
+
+    cont.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (t.getAttribute && t.getAttribute('data-reintentar')) { ev.stopPropagation(); cargarPlan_(key); }
+      else if (t.getAttribute && t.getAttribute('data-leer')) { ev.stopPropagation(); leerCotizacionDe_(key); }
+      else if (t.getAttribute && t.getAttribute('data-cambiar')) { ev.stopPropagation(); st.editando[t.getAttribute('data-cambiar')] = true; render(); }
+    });
+    cont.addEventListener('change', function (ev) {
+      var t = ev.target;
+      if (!t.getAttribute || !t.getAttribute('data-fila')) return;
+      var clave = t.getAttribute('data-fila');
+      // la fila se busca por su clave dentro del plan que se está mostrando
+      var fila = null;
+      plan.forEach(function (p) { p.filas.forEach(function (f) { if (GHPlan.claveFila(f) === clave) fila = f; }); });
+      if (fila) confirmarFichaFila_(key, fila, t.value);
+    });
+    return cont;
   }
 
   function buildMedicionesTable_(s) {
