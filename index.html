@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dashboard de Seguimiento de Mediciones — GH Consultora</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="plan.js?v=2026-10-16T13:07"></script>
+<script src="plan.js?v=2026-10-16T13:59"></script>
 <style>
   :root{
     --verde:      #4c9a2a; --verde-bg:   #eaf4e2;
@@ -362,7 +362,7 @@
   // para que una pestaña vieja se entere sola de que hay una version mas
   // nueva, en vez de quedarse corriendo el codigo con el que cargo para
   // siempre. Mismo mecanismo que en Seguimiento Ambiental.
-  var FRONTEND_VERSION = '2026-10-16T13:07';
+  var FRONTEND_VERSION = '2026-10-16T13:59';
 
   var idToken = null;
   var SERVICIOS = [];
@@ -914,6 +914,7 @@
 
       var div = document.createElement('div');
       div.className = 'servicio' + (openKeys[key] ? ' open' : '');
+      if (openKeys[key] && !s.esNuevo) autoLeerPlan_(s, key);
 
       var head = document.createElement('div');
       head.className = 'servicio-head';
@@ -1066,6 +1067,16 @@
     if (!item) return null;
     var p = GHPlan.planDeItem(CATALOGO_IX, item, EQUIPOS_CAL, st.correcciones);
     return p.fichas.length ? p : null;
+  }
+
+  // Al abrir un servicio con la OT generada y sin plan guardado, se lee la OT sola (una vez por sesión).
+  function autoLeerPlan_(s, key) {
+    var c = s.checklist || {};
+    if (!c.otUrl || !c.cotizacionUrl || !CATALOGO_IX) return;
+    var st = planEstado_(key);
+    if (st.autoIntento || st.cargando || (st.items && st.items.length)) return;
+    st.autoIntento = true;
+    setTimeout(function () { leerCotizacionDe_(key); }, 0);
   }
 
   function planEstado_(key) {
@@ -1222,13 +1233,9 @@
 
     // Con el plan cerrado igual se muestra el resumen si ya se calculó
     var resumen = '';
-    var items = null;
-    if (st.abierto || st.items !== undefined) {
-      if (CATALOGO_IX) {
-        items = st.items && st.items.length ? st.items
-          : (s.mediciones || []).filter(function (m) { return m.tipoMuestra; }).map(function (m) { return { titulo: m.tipoMuestra, muestras: m.cantidadMuestras, filas: [] }; });
-      }
-    }
+    // El título de un ítem puede ser un puesto o un área ("SOLDADURA"), no una medición: sin las filas de la OT
+    // no se arma ningún plan en vez de inventar parámetros a partir del título.
+    var items = (CATALOGO_IX && st.items && st.items.length) ? st.items : null;
     var plan = items && CATALOGO_IX ? GHPlan.planDeServicio(CATALOGO_IX, items, EQUIPOS_CAL, st.correcciones) : null;
     if (plan) {
       var ORD = ['rojo', 'naranja', 'amarillo', 'gris', 'verde'], peor = null, sin = 0, dud = 0;
@@ -1252,12 +1259,13 @@
       if (st.cargando) body.innerHTML = '<p class="plan-nota">Cargando el plan técnico…</p>';
       else if (st.error) body.innerHTML = '<p class="plan-nota" style="color:var(--rojo)">' + esc(st.error) + '</p>' +
         '<button type="button" class="btn" data-reintentar="1">Reintentar</button>';
-      else if (plan) {
+      else if (!plan) {
+        body.innerHTML = '<p class="plan-nota">' + (st.cargando ? 'Leyendo lo que dice la OT…' :
+          'Todavía no se leyó lo que dice la OT, así que no hay plan. ' +
+          (s.checklist && s.checklist.cotizacionUrl ? '<button type="button" class="btn" data-leer="1">Armar el plan desde la OT</button>' : 'Cargá la cotización para poder armarlo.')) + '</p>';
+      } else {
         var aviso = '';
-        if (!st.items || !st.items.length) {
-          aviso = '<p class="plan-nota">Todavía no se leyó lo que dice la OT: por ahora el plan usa solo el título de cada ítem. ' +
-            (s.checklist && s.checklist.cotizacionUrl ? '<button type="button" class="btn" data-leer="1">Armar el plan desde la OT</button>' : '') + '</p>';
-        } else if (s.checklist && s.checklist.cotizacionUrl) {
+        if (s.checklist && s.checklist.cotizacionUrl) {
           aviso = '<p class="plan-nota">Armado con lo que dice la OT. Si la OT cambió, <button type="button" class="mini" data-leer="1">volver a leerla</button>. Lo que confirmes queda guardado para todas las cotizaciones.</p>';
         }
         body.innerHTML = aviso + '<label class="m-jornada">Jornada de muestreo: <input type="number" min="1" step="10" data-jornada="1" value="' + st.jornada + '"> min</label>' + plan.map(function (it) { return dibujarPlanItem_(it, key, st); }).join('');
@@ -1306,6 +1314,10 @@
             var f = e.fisicos.filter(function (x) { return x.fecha_venc; }).sort(function (a, b) { return String(b.fecha_venc).localeCompare(String(a.fecha_venc)); })[0];
             return esc(e.nombre) + (f ? ' · vence ' + esc(f.fecha_venc) : ' · sin fecha');
           }).join('<br>') + '</div>' : '');
+      } else if (s.checklist && s.checklist.otUrl && (calib.estado === 'sin_equipo' || calib.estado === 'sin_match')) {
+        // Sin leer la OT no se sabe qué equipos hacen falta: mejor decirlo que afirmar "no requiere equipo".
+        var stLeyendo = PLAN_ESTADO[s.presupuestoGH || s.claveServicio || (s.empresa + '|' + s.fechaMuestreo)];
+        celdaEquipos = '<span class="badge gris">' + (stLeyendo && stLeyendo.cargando ? 'Leyendo la OT…' : 'Falta leer la OT') + '</span>';
       } else {
         celdaEquipos = '<span class="badge ' + (CALIB_COLOR[calib.estado] || 'gris') + '">' +
           esc(CALIB_LABEL[calib.estado] || calib.estado) + '</span>' +
