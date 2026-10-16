@@ -14,6 +14,8 @@
   function compacto(s) { return norm(s).replace(/[^a-z0-9]/g, ''); }
 
   var RE_TOTAL = /^total( de muestras)?\s+/;
+  // Filas de la cotización que no son una medición (títulos de columna, precios, condiciones y datos de pago).
+  var RE_COMERCIAL = /^(metodolog|metodo de analisis|parametros? a analizar|determinacion|precio|total\b|entrega de resultados|la entrega|informe de resultado|facturacion|pago|informacion para|titular|banco|tipo cuenta|numero\b|cbu|n[o°º]?\s*cuit|los precios|ley n|muestras?\b)/;
 
   function limpiarParametro(p) {
     var t = norm(p).replace(RE_TOTAL, '').replace(/[.:;]+$/, '').trim();
@@ -71,6 +73,7 @@
     var res = { parametro: nombreOriginal.trim(), metodologia: metodo.trim(), ficha: null, confianza: 'ninguna', candidatas: [], motivo: '' };
 
     if (!nombre && !metodo) { res.motivo = 'vacía'; res.ignorada = true; return res; }
+    if (RE_COMERCIAL.test(nombre)) { res.motivo = 'no es una medición'; res.ignorada = true; return res; }
     var todo = nombre + ' ' + norm(metodo);
     for (var k = 0; k < ix.ignorar.length; k++) {
       if (todo.indexOf(ix.ignorar[k]) !== -1) { res.ignorada = true; res.motivo = 'no es una medición'; return res; }

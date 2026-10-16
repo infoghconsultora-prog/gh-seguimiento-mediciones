@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dashboard de Seguimiento de Mediciones — GH Consultora</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="plan.js?v=2026-10-16T04:50"></script>
+<script src="plan.js?v=2026-10-16T13:07"></script>
 <style>
   :root{
     --verde:      #4c9a2a; --verde-bg:   #eaf4e2;
@@ -362,7 +362,7 @@
   // para que una pestaña vieja se entere sola de que hay una version mas
   // nueva, en vez de quedarse corriendo el codigo con el que cargo para
   // siempre. Mismo mecanismo que en Seguimiento Ambiental.
-  var FRONTEND_VERSION = '2026-10-16T04:50';
+  var FRONTEND_VERSION = '2026-10-16T13:07';
 
   var idToken = null;
   var SERVICIOS = [];
@@ -437,7 +437,7 @@
    *    despues de que fallo un intento.
    */
   var BACKEND_ESPEJO = 'https://script.google.com/macros/s/AKfycbwz5Eu-ScQ0qgUJQpMDE8GyotV92qIZNZn4aL1zsb269LiW0USACRPrZ1uwGG1POfxnTQ/exec';
-  var ACCIONES_LECTURA = { getData: 1, listarTemplatesCC: 1, listarBorrados: 1, getCatalogo: 1, getPlan: 1, getCalibraciones: 1 };
+  var ACCIONES_LECTURA = { getData: 1, listarTemplatesCC: 1, listarBorrados: 1, getCatalogo: 1, getPlan: 1, getPlanes: 1, getCalibraciones: 1 };
   var ACCIONES_ARCHIVO = { cargarCotizacion: 1, reemplazarCotizacion: 1, subirCCPersonalizada: 1, subirArchivoPaso: 1 };
   var PLAN_LECTURA   = { escalones: [0, 4000, 8000, 13000, 20000], max: 5, porIntento: 25000, tope: 50000 };
   var PLAN_ESCRITURA = { escalones: [0, 15000, 30000], max: 3, porIntento: 60000, tope: 90000 };
@@ -656,7 +656,7 @@
       document.getElementById('dashboardScreen').style.display = 'block';
       render();
       cargarTemplatesCC();
-      cargarCatalogo_().catch(function () { /* se reintenta al abrir el plan técnico */ });
+      cargarPlanes_();
     }).catch(function (fallo) {
       detenerCargaVisual();
       document.getElementById('gsiButton').style.display = 'block';
@@ -826,6 +826,7 @@
           data.avisoColumnas.join(' · '), 'error');
       }
       render();
+      cargarPlanes_();
     }).catch(function () {
       btn.disabled = false;
       avisar('No se pudo conectar con el backend.', 'error');
@@ -998,7 +999,6 @@
       var body = document.createElement('div');
       body.className = 'servicio-body';
       if (s.mediciones.length) body.appendChild(buildMedicionesTable_(s));
-      if (s.mediciones.length) body.appendChild(buildPlanTecnico_(s, key));
       body.appendChild(buildChecklist_(s, key));
       div.appendChild(body);
 
@@ -1040,6 +1040,32 @@
       CATALOGO_IX = GHPlan.indexar(cat);
     }).catch(function (err) { CATALOGO_PROMESA = null; throw err; });
     return CATALOGO_PROMESA;
+  }
+
+
+  // Los planes guardados de todos los servicios, de una vez: completan la columna de equipos sin abrir cada plan.
+  function cargarPlanes_() {
+    Promise.all([cargarCatalogo_(), callBackend('getPlanes', {})]).then(function (r) {
+      var d = r[1];
+      if (!d || !d.ok) return;
+      Object.keys(d.planes || {}).forEach(function (k) {
+        var st = planEstado_(k);
+        st.items = d.planes[k];
+        st.correcciones = d.correcciones || {};
+      });
+      render();
+    }).catch(function () { /* la columna usa el cálculo anterior */ });
+  }
+
+  // Plan de una medición de la tabla: el ítem de la OT que se llama igual que la medición.
+  function planDeMedicion_(s, m, key) {
+    var st = PLAN_ESTADO[key];
+    if (!CATALOGO_IX || !st || !st.items || !st.items.length) return null;
+    var t = GHPlan.norm(m.tipoMuestra);
+    var item = st.items.filter(function (it) { return GHPlan.norm(it.titulo) === t; })[0];
+    if (!item) return null;
+    var p = GHPlan.planDeItem(CATALOGO_IX, item, EQUIPOS_CAL, st.correcciones);
+    return p.fichas.length ? p : null;
   }
 
   function planEstado_(key) {
@@ -1229,10 +1255,10 @@
       else if (plan) {
         var aviso = '';
         if (!st.items || !st.items.length) {
-          aviso = '<p class="plan-nota">Este plan se armó solo con los títulos de la cotización. ' +
-            (s.checklist && s.checklist.cotizacionUrl ? 'Para verlo parámetro por parámetro, leé la cotización: <button type="button" class="btn" data-leer="1">Leer la cotización</button>' : 'Cargá la cotización para verlo parámetro por parámetro.') + '</p>';
+          aviso = '<p class="plan-nota">Todavía no se leyó lo que dice la OT: por ahora el plan usa solo el título de cada ítem. ' +
+            (s.checklist && s.checklist.cotizacionUrl ? '<button type="button" class="btn" data-leer="1">Armar el plan desde la OT</button>' : '') + '</p>';
         } else if (s.checklist && s.checklist.cotizacionUrl) {
-          aviso = '<p class="plan-nota">Armado con las filas de la cotización. Si la cotización cambió, <button type="button" class="mini" data-leer="1">volver a leerla</button>. Lo que confirmes queda guardado para todas las cotizaciones.</p>';
+          aviso = '<p class="plan-nota">Armado con lo que dice la OT. Si la OT cambió, <button type="button" class="mini" data-leer="1">volver a leerla</button>. Lo que confirmes queda guardado para todas las cotizaciones.</p>';
         }
         body.innerHTML = aviso + '<label class="m-jornada">Jornada de muestreo: <input type="number" min="1" step="10" data-jornada="1" value="' + st.jornada + '"> min</label>' + plan.map(function (it) { return dibujarPlanItem_(it, key, st); }).join('');
       }
@@ -1268,19 +1294,32 @@
     // mismo orden y empuja un item por cada una, asi que el detalle queda
     // alineado 1:1 por indice con s.mediciones.
     var detalle = (s.equiposCalibrados && s.equiposCalibrados.detalle) || [];
+    var ETQ_PLAN = { verde: 'Equipos OK', amarillo: 'Vence pronto', naranja: 'Vence pronto', rojo: 'Equipo vencido', gris: 'Sin fecha de calibración', sin_dato: 'Sin dato en Calibraciones', sin_equipo: 'No requiere equipo' };
     var rows = s.mediciones.map(function (m, i) {
       var calib = detalle[i] || { estado: 'sin_match' };
-      return '<tr>' +
-        '<td>' + esc(m.tipoMuestra || '—') + (m.cantidadMuestras ? ' <span style="color:var(--ink-soft);">(' + esc(m.cantidadMuestras) + ')</span>' : '') + '</td>' +
-        '<td>' + (m.derivacionLab ? esc(m.derivacionLab) + (m.presupuestoLab ? ' · ppto ' + esc(m.presupuestoLab) : '') : 'Directa') + '</td>' +
-        '<td><span class="badge ' + (CALIB_COLOR[calib.estado] || 'gris') + '">' +
+      // Con la OT leída, los equipos salen de TODOS los parámetros del ítem (bomba + balanza + analizadores...)
+      var plan = planDeMedicion_(s, m, s.presupuestoGH || s.claveServicio || (s.empresa + '|' + s.fechaMuestreo));
+      var celdaEquipos;
+      if (plan) {
+        celdaEquipos = '<span class="badge ' + (PLAN_ESTADO_COLOR[plan.estado] || 'gris') + '">' + esc(ETQ_PLAN[plan.estado] || plan.estado) + '</span>' +
+          (plan.equipos.length ? '<div style="font-size:11px;color:var(--ink-soft);margin-top:3px;">' + plan.equipos.map(function (e) {
+            var f = e.fisicos.filter(function (x) { return x.fecha_venc; }).sort(function (a, b) { return String(b.fecha_venc).localeCompare(String(a.fecha_venc)); })[0];
+            return esc(e.nombre) + (f ? ' · vence ' + esc(f.fecha_venc) : ' · sin fecha');
+          }).join('<br>') + '</div>' : '');
+      } else {
+        celdaEquipos = '<span class="badge ' + (CALIB_COLOR[calib.estado] || 'gris') + '">' +
           esc(CALIB_LABEL[calib.estado] || calib.estado) + '</span>' +
           ((calib.equipos || []).length
             ? '<div style="font-size:11px;color:var(--ink-soft);margin-top:3px;">' +
               calib.equipos.map(function (eq) {
                 return esc(eq.equipo) + (eq.fecha_venc ? ' · vence ' + esc(eq.fecha_venc) : ' · sin fecha');
               }).join('<br>') + '</div>'
-            : '') + '</td>' +
+            : '');
+      }
+      return '<tr>' +
+        '<td>' + esc(m.tipoMuestra || '—') + (m.cantidadMuestras ? ' <span style="color:var(--ink-soft);">(' + esc(m.cantidadMuestras) + ')</span>' : '') + '</td>' +
+        '<td>' + (m.derivacionLab ? esc(m.derivacionLab) + (m.presupuestoLab ? ' · ppto ' + esc(m.presupuestoLab) : '') : 'Directa') + '</td>' +
+        '<td>' + celdaEquipos + '</td>' +
         '<td>' + (m.entregaInforme ? 'Informe listo' : (m.entregaResultados ? 'Resultados OK, falta informe' : 'Pendiente')) + (m.entregaFecha ? ' · ' + esc(m.entregaFecha) : '') + '</td>' +
         '<td>' + (m.facturaServicio.numero ? 'Nº ' + esc(m.facturaServicio.numero) : '—') + '</td>' +
         '</tr>';
@@ -1352,6 +1391,10 @@
     wrap.appendChild(stepPaso_('2. Orden de Trabajo', !!c.cotizacionUrl, [
       otItemConBoton_(s, c, update_)
     ]));
+
+    // El plan técnico se arma con lo que dice la OT (lo que efectivamente se va a hacer): aparece recién
+    // cuando la OT está generada.
+    if (c.otUrl) wrap.appendChild(buildPlanTecnico_(s, key));
 
     var ccOk = !!c.otUrl;
     var pasoCC = stepPaso_('3. Cadena de Custodia', ccOk, [
