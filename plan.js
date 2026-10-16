@@ -147,6 +147,16 @@
     // coincide: el método cotizado es uno de los que la ficha trae con datos de muestreo
     res.coincide = res.metodosCotizados.length === 0 ? null :
       res.metodosCotizados.some(function (m) { var k = compacto(m.codigo); return reales.some(function (r) { return k.indexOf(r) === 0; }); });
+    // Otro método cotizado para un elemento que el método de la ficha también determina (NIOSH 7300 y el zinc, por ejemplo):
+    // el muestreo es el mismo, no hay nada que confirmar.
+    if (res.coincide === false && ficha && ficha.analitos) {
+      var nombre = limpiarParametro(res.parametro);
+      if (ficha.analitos.some(function (a) { return contieneFrase(nombre, a); })) {
+        res.coincide = true;
+        res.cubiertoPor = (ficha.metodos && ficha.metodos[0] && ficha.metodos[0].codigo) || '';
+        res.metodosCotizados.forEach(function (m) { if (!m.enBiblioteca) m.cubiertoPor = res.cubiertoPor; });
+      }
+    }
     return res;
   }
 
@@ -184,7 +194,7 @@
       (f.metodosCotizados || []).forEach(function (m) {
         var k = compacto(m.codigo);
         if (metodos[k]) return;
-        metodos[k] = m.enBiblioteca ? Object.assign({}, m.ref, { codigoCotizado: m.codigo }) : { codigo: m.codigo, faltante: true };
+        metodos[k] = m.enBiblioteca ? Object.assign({}, m.ref, { codigoCotizado: m.codigo }) : { codigo: m.codigo, faltante: true, cubiertoPor: m.cubiertoPor || '', elemento: f.parametro };
       });
       if (f.ficha && f.coincide === false) {
         discrepancias.push({ ficha: f.ficha, parametro: f.parametro, metodo: (f.metodosCotizados || []).map(function (m) { return m.codigo; }).join(' / '),

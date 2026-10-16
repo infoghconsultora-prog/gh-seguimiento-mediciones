@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dashboard de Seguimiento de Mediciones — GH Consultora</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="plan.js?v=2026-10-16T14:36"></script>
+<script src="plan.js?v=2026-10-16T14:55"></script>
 <style>
   :root{
     --verde:      #4c9a2a; --verde-bg:   #eaf4e2;
@@ -364,7 +364,7 @@
   // para que una pestaña vieja se entere sola de que hay una version mas
   // nueva, en vez de quedarse corriendo el codigo con el que cargo para
   // siempre. Mismo mecanismo que en Seguimiento Ambiental.
-  var FRONTEND_VERSION = '2026-10-16T14:36';
+  var FRONTEND_VERSION = '2026-10-16T14:55';
 
   var idToken = null;
   var SERVICIOS = [];
@@ -1139,6 +1139,7 @@
   }
 
   function docLink_(d) {
+    if (d.faltante && d.cubiertoPor) return '<span class="sub">' + esc(d.codigo) + ' — no está en el Drive; lo cubre ' + esc(d.cubiertoPor) + '</span>';
     if (d.faltante) return '<span class="falta">' + esc(d.codigo) + ' — no está en el Drive</span>';
     var txt = esc(d.codigo) + (d.titulo ? ' <span class="sub">' + esc(d.titulo) + '</span>' : '');
     var l = d.driveId ? '<a href="' + urlDrive_(d.driveId) + '" target="_blank" rel="noopener">' + esc(d.codigo) + '</a>' +
@@ -1201,7 +1202,9 @@
       var metodoHtml = esc(f.metodologia || '—') + (f.metodosCotizados || []).map(function (m) {
         return '<div class="motivo">' + (m.enBiblioteca
           ? '<a href="' + urlDrive_(m.ref.driveId) + '" target="_blank" rel="noopener">' + esc(m.ref.codigo) + '</a> · en la Biblioteca'
-          : '<span class="falta-metodo">' + esc(m.codigo) + ' · no está en la Biblioteca</span>') + '</div>';
+          : (m.cubiertoPor
+            ? '<span class="sub">' + esc(m.codigo) + ' · no está en la Biblioteca, pero ' + esc(m.cubiertoPor) + ' también determina este elemento</span>'
+            : '<span class="falta-metodo">' + esc(m.codigo) + ' · no está en la Biblioteca</span>')) + '</div>';
       }).join('');
       if (f.ficha && f.coincide === false) celda += '<div class="motivo falta-metodo">El método cotizado no es el de esta ficha: los datos de muestreo son de referencia.</div>';
       return { f: f, clave: clave, html: '<tr><td>' + esc(f.parametro) + '</td><td>' + metodoHtml + '</td><td>' + celda + '</td><td>' +
