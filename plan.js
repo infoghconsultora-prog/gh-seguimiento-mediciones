@@ -35,6 +35,33 @@
     return false;
   }
 
+  // Códigos de los métodos que SÍ están en la ficha (a diferencia de los alias, que son solo para reconocer filas).
+  function p_codigosMetodo(catalogo) {
+    catalogo.parametros.forEach(function (p) {
+      p._metodoReal = (p.metodos || []).map(function (m) { return compacto(m.codigo); });
+    });
+  }
+
+  // Códigos de método con forma de norma dentro de un texto: "NIOSH 7300", "OSHA ID 121", "EPA IO 2.3", "ISO 2631"...
+  var RE_NORMA = /\b(NIOSH|OSHA(?:\s*ID)?|EPA(?:\s*(?:IO|SW-?846|CTM|M))?|ASTM|ISO|IRAM|UNE|SM|CH|NTP)[\s-]*([A-Z]?\d[\d.\-A-Za-z]*(?:\/\d+)?)/gi;
+  function codigosDeNorma(texto) {
+    var salida = [], m;
+    RE_NORMA.lastIndex = 0;
+    while ((m = RE_NORMA.exec(String(texto || ''))) !== null) {
+      var visto = m[0].replace(/\s+/g, ' ').trim();
+      if (salida.indexOf(visto) === -1) salida.push(visto);
+    }
+    return salida;
+  }
+  // Busca el código cotizado en el índice de la Biblioteca (acepta "IRAM 4062/2025" para "IRAM 4062").
+  function resolverCodigo(ix, codigo) {
+    var k = compacto(codigo), refs = ix.refs || {};
+    if (refs[k]) return refs[k];
+    var mejor = null;
+    Object.keys(refs).forEach(function (kk) { if (k.indexOf(kk) === 0 && (!mejor || kk.length > mejor.length)) mejor = kk; });
+    return mejor ? refs[mejor] : null;
+  }
+
   function indexar(catalogo) {
     var porId = {};
     catalogo.parametros.forEach(function (p) {
@@ -42,7 +69,8 @@
       p._frases = (p.frases || []).map(norm);
       porId[p.id] = p;
     });
-    return { cat: catalogo, porId: porId, ignorar: (catalogo.ignorar || []).map(norm) };
+    p_codigosMetodo(catalogo);
+    return { cat: catalogo, porId: porId, ignorar: (catalogo.ignorar || []).map(norm), refs: catalogo.metodosRef || {} };
   }
 
   // Puntaje de una ficha para una fila. Un código de método vale más que una frase del
@@ -83,7 +111,7 @@
     var clave = claveFila(fila);
     if (correcciones && correcciones[clave] && ix.porId[correcciones[clave]]) {
       res.ficha = correcciones[clave]; res.confianza = 'confirmada'; res.motivo = 'confirmada por el equipo';
-      return res;
+      return conMetodoCotizado(ix, res, metodo);
     }
 
     var metodoCompacto = compacto(metodo + ' ' + nombreOriginal);
@@ -105,6 +133,20 @@
     if (segundo && segundo.puntos >= top.puntos - 0.5 && segundo.id !== top.id) {
       res.confianza = 'media'; res.motivo = 'podría ser también: ' + segundo.id;
     }
+    return conMetodoCotizado(ix, res, metodo);
+  }
+
+  // Qué método se cotizó para la fila, si está en la Biblioteca y si es el mismo de la ficha de muestreo.
+  function conMetodoCotizado(ix, res, metodo) {
+    res.metodosCotizados = codigosDeNorma(metodo).map(function (c) {
+      var ref = resolverCodigo(ix, c);
+      return ref ? { codigo: c, enBiblioteca: true, ref: ref } : { codigo: c, enBiblioteca: false };
+    });
+    var ficha = res.ficha ? ix.porId[res.ficha] : null;
+    var reales = ficha ? (ficha._metodoReal || []) : [];
+    // coincide: el método cotizado es uno de los que la ficha trae con datos de muestreo
+    res.coincide = res.metodosCotizados.length === 0 ? null :
+      res.metodosCotizados.some(function (m) { var k = compacto(m.codigo); return reales.some(function (r) { return k.indexOf(r) === 0; }); });
     return res;
   }
 
@@ -136,9 +178,20 @@
       if (f.ficha && !vistas[f.ficha]) { vistas[f.ficha] = true; fichas.push(ix.porId[f.ficha]); }
     });
 
-    var metodos = {}, procs = {}, legis = {}, eqIds = {}, cc = {};
+    var metodos = {}, procs = {}, legis = {}, eqIds = {}, cc = {}, discrepancias = [];
+    // Los métodos del plan son los COTIZADOS (no los que trae la ficha): si no está en la Biblioteca se dice.
+    filas.forEach(function (f) {
+      (f.metodosCotizados || []).forEach(function (m) {
+        var k = compacto(m.codigo);
+        if (metodos[k]) return;
+        metodos[k] = m.enBiblioteca ? Object.assign({}, m.ref, { codigoCotizado: m.codigo }) : { codigo: m.codigo, faltante: true };
+      });
+      if (f.ficha && f.coincide === false) {
+        discrepancias.push({ ficha: f.ficha, parametro: f.parametro, metodo: (f.metodosCotizados || []).map(function (m) { return m.codigo; }).join(' / '),
+          enBiblioteca: (f.metodosCotizados || []).every(function (m) { return m.enBiblioteca; }) });
+      }
+    });
     fichas.forEach(function (p) {
-      p.metodos.forEach(function (m) { metodos[m.codigo] = m; });
       p.proc.forEach(function (m) { procs[m.codigo] = m; });
       p.legis.forEach(function (m) { legis[m.codigo] = m; });
       (p.equipos || []).forEach(function (e) { eqIds[e] = true; });
@@ -167,7 +220,7 @@
 
     return {
       titulo: item.titulo, muestras: item.muestras || '', filas: filas, fichas: fichas.map(function (p) { return p.id; }),
-      metodos: Object.keys(metodos).map(function (k) { return metodos[k]; }),
+      metodos: Object.keys(metodos).map(function (k) { return metodos[k]; }), discrepancias: discrepancias,
       procedimientos: Object.keys(procs).map(function (k) { return procs[k]; }),
       legislacion: Object.keys(legis).map(function (k) { return legis[k]; }),
       equipos: equipos, estado: equipos.length ? (peor || 'sin_dato') : 'sin_equipo', planillasCC: Object.keys(cc),
@@ -277,6 +330,15 @@
       if (g.compartido || mid === 'directa' || mid === 'isocinetico') {
         (M.notas[mid] || []).forEach(function (n) { g.notas.push(n); });
       }
+      // El plan se plantea con el método cotizado: si el cotizado no es el de la ficha, los datos son de referencia.
+      (opc.discrepancias || []).forEach(function (d) {
+        if (g.fichas.indexOf(d.ficha) === -1) return;
+        var ficha = ix.porId[d.ficha];
+        var base = (ficha.metodos || []).map(function (m) { return m.codigo; }).join(' / ') || 'otro método';
+        g.avisos.push(d.parametro + ': se cotizó por ' + d.metodo + (d.enBiblioteca ? '' : ' (no está en la Biblioteca)') +
+          '. El medio y el caudal de este grupo salen de ' + base + ': confirmar con el método cotizado antes de compartir el filtro.');
+        g.provisional = true;
+      });
       g.muestras = muestras;
       grupos.push(g);
     });
@@ -314,7 +376,7 @@
     return (items || []).map(function (it) { return planDeItem(ix, it, equiposCal, correcciones, hoy); });
   }
 
-  var API = { claveFila: claveFila, norm: norm, compacto: compacto, indexar: indexar, cruzarFila: cruzarFila, cruzarTitulo: cruzarTitulo,
+  var API = { codigosDeNorma: codigosDeNorma, resolverCodigo: resolverCodigo, claveFila: claveFila, norm: norm, compacto: compacto, indexar: indexar, cruzarFila: cruzarFila, cruzarTitulo: cruzarTitulo,
     planDeItem: planDeItem, agruparMuestreo: agruparMuestreo, planDeServicio: planDeServicio, estadoEquipo: estadoEquipo };
   if (typeof module !== 'undefined' && module.exports) module.exports = API; else global.GHPlan = API;
 })(typeof window !== 'undefined' ? window : this);

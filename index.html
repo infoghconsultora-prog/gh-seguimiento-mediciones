@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dashboard de Seguimiento de Mediciones — GH Consultora</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="plan.js?v=2026-10-16T13:59"></script>
+<script src="plan.js?v=2026-10-16T14:36"></script>
 <style>
   :root{
     --verde:      #4c9a2a; --verde-bg:   #eaf4e2;
@@ -79,6 +79,8 @@
   .plan-filas td{padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top;}
   .plan-filas tr:last-child td{border-bottom:none;}
   .plan-filas select{max-width:100%;font-size:12px;padding:3px 4px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);}
+  .plan-filas .falta-metodo{color:var(--rojo);font-weight:600;}
+  .plan-filas a{color:var(--brand-dark);font-weight:600;text-decoration:none;}
   .plan-filas .motivo{font-size:11px;color:var(--ink-soft);}
   .plan-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:6px;}
   .plan-cols h6{margin:0 0 5px;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);}
@@ -362,7 +364,7 @@
   // para que una pestaña vieja se entere sola de que hay una version mas
   // nueva, en vez de quedarse corriendo el codigo con el que cargo para
   // siempre. Mismo mecanismo que en Seguimiento Ambiental.
-  var FRONTEND_VERSION = '2026-10-16T13:59';
+  var FRONTEND_VERSION = '2026-10-16T14:36';
 
   var idToken = null;
   var SERVICIOS = [];
@@ -1153,7 +1155,7 @@
   // Qué se puede compartir en el muestreo (filtro, tubo, instrumento) y qué no, con la razón.
   function dibujarMuestreo_(it, st) {
     if (!it.fichas || !it.fichas.length || !CATALOGO.muestreo) return '';
-    var m = GHPlan.agruparMuestreo(CATALOGO_IX, it.fichas, { jornada: st.jornada, muestras: it.muestras });
+    var m = GHPlan.agruparMuestreo(CATALOGO_IX, it.fichas, { jornada: st.jornada, muestras: it.muestras, discrepancias: it.discrepancias });
     var nombreDe = function (id) { return CATALOGO_IX.porId[id] ? CATALOGO_IX.porId[id].nombre : id; };
     var grupos = m.grupos.map(function (g) {
       var comparte = g.compartido && g.estado !== 'no_compatible';
@@ -1196,16 +1198,26 @@
           (f.ficha && !editando ? '<div class="motivo">Propuesta: ' + esc(fichaNombre) + ' · ' + esc(f.motivo) + '</div>' : '') +
           (!f.ficha ? '<div class="motivo">' + esc(f.motivo) + '</div>' : '');
       }
-      return { f: f, clave: clave, html: '<tr><td>' + esc(f.parametro) + '</td><td>' + esc(f.metodologia || '—') + '</td><td>' + celda + '</td><td>' +
+      var metodoHtml = esc(f.metodologia || '—') + (f.metodosCotizados || []).map(function (m) {
+        return '<div class="motivo">' + (m.enBiblioteca
+          ? '<a href="' + urlDrive_(m.ref.driveId) + '" target="_blank" rel="noopener">' + esc(m.ref.codigo) + '</a> · en la Biblioteca'
+          : '<span class="falta-metodo">' + esc(m.codigo) + ' · no está en la Biblioteca</span>') + '</div>';
+      }).join('');
+      if (f.ficha && f.coincide === false) celda += '<div class="motivo falta-metodo">El método cotizado no es el de esta ficha: los datos de muestreo son de referencia.</div>';
+      return { f: f, clave: clave, html: '<tr><td>' + esc(f.parametro) + '</td><td>' + metodoHtml + '</td><td>' + celda + '</td><td>' +
         (conf ? '<span class="badge ' + conf[0] + '">' + conf[1] + '</span>' : '') + '</td></tr>' };
     });
 
     var estadoBadge = '<span class="badge ' + (PLAN_ESTADO_COLOR[it.estado] || 'gris') + '">' + esc(PLAN_ESTADO_LABEL[it.estado] || it.estado) + '</span>';
     var conocidas = it.filas.length && it.filas.some(function (f) { return f.ficha; });
-    var tabla = '<table class="plan-filas"><thead><tr><th>Parámetro cotizado</th><th>Método cotizado</th><th>Ficha de la Biblioteca</th><th></th></tr></thead><tbody>' +
+    var tabla = '<table class="plan-filas"><thead><tr><th>Parámetro cotizado</th><th>Método cotizado</th><th title="Ficha de muestreo del Planificador de la Biblioteca: medio de captación, caudal, volumen y equipos. No es un archivo.">Datos de muestreo (ficha)</th><th></th></tr></thead><tbody>' +
       filas.map(function (x) { return x.html; }).join('') + '</tbody></table>';
 
-    var metodos = it.metodos.length ? '<ul>' + it.metodos.map(function (m) { return '<li>' + docLink_(m) + '</li>'; }).join('') + '</ul>' : '<p class="sub">Sin método en la Biblioteca.</p>';
+    var textoCotizado = [];
+    it.filas.forEach(function (f) { if (f.metodologia && textoCotizado.indexOf(f.metodologia) === -1 && !(f.metodosCotizados || []).length && !f.ignorada) textoCotizado.push(f.metodologia); });
+    var metodos = it.metodos.length ? '<ul>' + it.metodos.map(function (m) { return '<li>' + docLink_(m) + '</li>'; }).join('') + '</ul>' : '';
+    if (textoCotizado.length) metodos += '<p class="sub">' + (it.metodos.length ? 'Además, según la cotización: ' : 'Según la cotización: ') + textoCotizado.map(esc).join(' · ') + '</p>';
+    if (!metodos) metodos = '<p class="sub">La cotización no indica un método de norma.</p>';
     var procs = it.procedimientos.length ? '<ul>' + it.procedimientos.map(function (m) { return '<li>' + docLink_(m) + '</li>'; }).join('') + '</ul>' : '<p class="sub">Sin procedimiento GH asociado.</p>';
     var legis = it.legislacion.length ? '<ul>' + it.legislacion.map(function (m) { return '<li>' + docLink_(m) + '</li>'; }).join('') + '</ul>' : '';
     var equipos = it.equipos.length ? '<ul>' + it.equipos.map(function (e) {
@@ -1222,7 +1234,7 @@
       (it.sinFicha ? ' <span class="badge rojo">' + it.sinFicha + ' sin ficha</span>' : '') +
       (it.dudosas ? ' <span class="badge amarillo">' + it.dudosas + ' para revisar</span>' : '') + '</h5>' +
       (it.filas.length ? tabla : '') +
-      (conocidas ? '<div class="plan-cols"><div><h6>Métodos</h6>' + metodos + '<h6 style="margin-top:10px">Procedimientos GH</h6>' + procs + (legis ? '<h6 style="margin-top:10px">Legislación</h6>' + legis : '') + '</div>' +
+      (conocidas ? '<div class="plan-cols"><div><h6>Métodos cotizados</h6>' + metodos + '<h6 style="margin-top:10px">Procedimientos GH</h6>' + procs + (legis ? '<h6 style="margin-top:10px">Legislación</h6>' + legis : '') + '</div>' +
         '<div><h6>Equipos y calibración</h6>' + equipos + cc + '</div></div>' + dibujarMuestreo_(it, st) : '<p class="plan-nota">No se encontró ninguna ficha para este ítem: elegí la que corresponde arriba.</p>') + '</div>';
   }
 
