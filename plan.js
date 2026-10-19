@@ -142,6 +142,21 @@
       var ref = resolverCodigo(ix, c);
       return ref ? { codigo: c, enBiblioteca: true, ref: ref } : { codigo: c, enBiblioteca: false };
     });
+    // ¿el método cotizado determina ese elemento? (lista de elementos de cada método)
+    var tabla = ix.cat.analitosMetodo || {};
+    var todos = {};
+    Object.keys(tabla).forEach(function (m) { tabla[m].forEach(function (e) { todos[e] = true; }); });
+    var elemento = Object.keys(todos).filter(function (e) { return contieneFrase(limpiarParametro(res.parametro), e); })[0];
+    res.noCubre = [];
+    if (elemento) {
+      res.metodosCotizados.forEach(function (m) {
+        var clave = Object.keys(tabla).filter(function (k) { return compacto(k) === compacto(m.ref ? m.ref.codigo : m.codigo); })[0];
+        if (clave && tabla[clave].indexOf(elemento) === -1) {
+          res.noCubre.push({ codigo: m.codigo, elemento: elemento,
+            alternativas: Object.keys(tabla).filter(function (k) { return k !== clave && tabla[k].indexOf(elemento) !== -1 && ix.refs[compacto(k)]; }) });
+        }
+      });
+    }
     var ficha = res.ficha ? ix.porId[res.ficha] : null;
     var reales = ficha ? (ficha._metodoReal || []) : [];
     // coincide: el método cotizado es uno de los que la ficha trae con datos de muestreo
@@ -178,7 +193,7 @@
       if (f.ficha && !vistas[f.ficha]) { vistas[f.ficha] = true; fichas.push(ix.porId[f.ficha]); }
     });
 
-    var metodos = {}, procs = {}, legis = {}, eqIds = {}, cc = {}, discrepancias = [];
+    var metodos = {}, procs = {}, legis = {}, eqIds = {}, cc = {}, discrepancias = [], avisosMetodo = [];
     // Los métodos del plan son los COTIZADOS (no los que trae la ficha): si no está en la Biblioteca se dice.
     filas.forEach(function (f) {
       (f.metodosCotizados || []).forEach(function (m) {
@@ -186,6 +201,7 @@
         if (metodos[k]) return;
         metodos[k] = m.enBiblioteca ? Object.assign({}, m.ref, { codigoCotizado: m.codigo }) : { codigo: m.codigo, faltante: true };
       });
+      (f.noCubre || []).forEach(function (n) { avisosMetodo.push(f.parametro + ': ' + n.codigo + ' no incluye ' + n.elemento + (n.alternativas.length ? '; sí lo determina ' + n.alternativas.join(' / ') : '') + '.'); });
       if (f.ficha && f.coincide === false) {
         discrepancias.push({ ficha: f.ficha, parametro: f.parametro, metodo: (f.metodosCotizados || []).map(function (m) { return m.codigo; }).join(' / '),
           enBiblioteca: (f.metodosCotizados || []).every(function (m) { return m.enBiblioteca; }) });
@@ -220,7 +236,7 @@
 
     return {
       titulo: item.titulo, muestras: item.muestras || '', filas: filas, fichas: fichas.map(function (p) { return p.id; }),
-      metodos: Object.keys(metodos).map(function (k) { return metodos[k]; }), discrepancias: discrepancias,
+      metodos: Object.keys(metodos).map(function (k) { return metodos[k]; }), discrepancias: discrepancias, avisosMetodo: avisosMetodo,
       procedimientos: Object.keys(procs).map(function (k) { return procs[k]; }),
       legislacion: Object.keys(legis).map(function (k) { return legis[k]; }),
       equipos: equipos, estado: equipos.length ? (peor || 'sin_dato') : 'sin_equipo', planillasCC: Object.keys(cc),

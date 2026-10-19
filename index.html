@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dashboard de Seguimiento de Mediciones — GH Consultora</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="plan.js?v=2026-10-16T14:57"></script>
+<script src="plan.js?v=2026-10-19T16:25"></script>
 <style>
   :root{
     --verde:      #4c9a2a; --verde-bg:   #eaf4e2;
@@ -364,7 +364,7 @@
   // para que una pestaña vieja se entere sola de que hay una version mas
   // nueva, en vez de quedarse corriendo el codigo con el que cargo para
   // siempre. Mismo mecanismo que en Seguimiento Ambiental.
-  var FRONTEND_VERSION = '2026-10-16T14:57';
+  var FRONTEND_VERSION = '2026-10-19T16:25';
 
   var idToken = null;
   var SERVICIOS = [];
@@ -1205,6 +1205,10 @@
           : (m.cubiertoPor
             ? '<span class="sub">' + esc(m.codigo) + ' · no está en la Biblioteca, pero ' + esc(m.cubiertoPor) + ' también determina este elemento</span>'
             : '<span class="falta-metodo">' + esc(m.codigo) + ' · no está en la Biblioteca</span>')) + '</div>';
+      }).join('');
+      metodoHtml += (f.noCubre || []).map(function (n) {
+        return '<div class="motivo falta-metodo">' + esc(n.codigo) + ' no incluye ' + esc(n.elemento) +
+          (n.alternativas && n.alternativas.length ? '; sí lo determina ' + esc(n.alternativas.join(' / ')) : '') + '</div>';
       }).join('');
       if (f.ficha && f.coincide === false) celda += '<div class="motivo falta-metodo">El método cotizado no es el de esta ficha: los datos de muestreo son de referencia.</div>';
       return { f: f, clave: clave, html: '<tr><td>' + esc(f.parametro) + '</td><td>' + metodoHtml + '</td><td>' + celda + '</td><td>' +
