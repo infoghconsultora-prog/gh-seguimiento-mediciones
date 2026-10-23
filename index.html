@@ -19,7 +19,7 @@
 <link rel="apple-touch-icon" sizes="167x167" href="icons/icon-167.png">
 <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="plan.js?v=2026-10-23T15:36"></script>
+<script src="plan.js?v=2026-10-23T15:48"></script>
 <style>
   :root{
     --verde:      #4c9a2a; --verde-bg:   #eaf4e2;
@@ -436,7 +436,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
   // para que una pestaña vieja se entere sola de que hay una version mas
   // nueva, en vez de quedarse corriendo el codigo con el que cargo para
   // siempre. Mismo mecanismo que en Seguimiento Ambiental.
-  var FRONTEND_VERSION = '2026-10-23T15:36';
+  var FRONTEND_VERSION = '2026-10-23T15:48';
 
   var idToken = null;
   var SERVICIOS = [];
@@ -1315,7 +1315,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
 
     var abierto = !!st.itemsAbiertos[idx];
     return '<div class="plan-item' + (abierto ? ' abierto' : '') + '"><h5 class="plan-item-head" data-item="' + idx + '"><span class="chev">▶</span> ' +
-      esc(it.titulo || 'Ítem') + (it.puesto ? ' <span style="font-weight:700;color:var(--ink)">· ' + esc(it.puesto) + '</span>' : '') + (it.muestras ? ' <span>' + esc(it.muestras) + ' muestra(s)</span>' : '') + ' ' + estadoBadge +
+      (it.numero ? '<span style="font-weight:700">Ítem ' + esc(it.numero) + ' —</span> ' : '') + esc(it.titulo || 'Ítem') + (it.puesto ? ' <span style="font-weight:700;color:var(--ink)">· ' + esc(it.puesto) + '</span>' : '') + (it.muestras ? ' <span>' + esc(it.muestras) + ' muestra(s)</span>' : '') + ' ' + estadoBadge +
       (it.sinFicha ? ' <span class="badge rojo">' + it.sinFicha + ' sin ficha</span>' : '') +
       (it.dudosas ? ' <span class="badge amarillo">' + it.dudosas + ' para revisar</span>' : '') + '</h5>' +
       '<div class="plan-item-body">' +
