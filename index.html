@@ -281,13 +281,41 @@
   :root[data-theme="light"] header{background:linear-gradient(180deg, #ffffff 0%, #f2f6ec 100%);}
 
   #themeToggle{
-    position:fixed; top:16px; right:16px; z-index:60;
-    display:flex; align-items:center; gap:6px;
+    display:flex; align-items:center; gap:6px; min-height:44px;
     background:var(--card); border:1px solid var(--line); border-radius:999px;
     padding:6px 12px; font-size:13px; font-weight:600; color:var(--ink-soft);
     cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,.08);
   }
   #themeToggle:hover{border-color:var(--brand-dark); color:var(--brand-dark);}
+</style>
+<script>try{var e=localStorage.getItem('gh-escala:gh-seguimiento-mediciones');if(e==='115'||e==='130'||e==='150')document.documentElement.setAttribute('data-escala',e)}catch(_){}</script>
+<style>
+/* ---------- tamaño de interfaz (control de accesibilidad; escala todo con zoom) ---------- */
+html[data-escala="115"]{zoom:1.15;--gh-z:1.15}
+html[data-escala="130"]{zoom:1.3;--gh-z:1.3}
+html[data-escala="150"]{zoom:1.5;--gh-z:1.5}
+@media print{html[data-escala]{zoom:1}}
+.gh-esc{position:relative;flex:none;width:44px;height:44px;display:inline-grid;place-items:center;padding:0;border:0;border-radius:50%;
+  background:rgba(128,128,128,.14);color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.gh-esc:active{background:rgba(128,128,128,.28)}
+.gh-esc:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+.gh-esc svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.gh-esc-n{position:absolute;left:50%;transform:translateX(-50%);bottom:-9px;min-width:30px;padding:0 4px;border-radius:999px;background:#4a7a1e;color:#fff;
+  font:700 11px/16px -apple-system,"SF Pro Text",system-ui,sans-serif;text-align:center}
+.gh-esc-n:empty{display:none}
+.gh-esc-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@supports not (zoom:1){.gh-esc{display:none}}
+/* con zoom, vh/dvh también se multiplican: se divide para que las pantallas altas sigan midiendo el alto real */
+.gh-login{min-height:calc(100vh / var(--gh-z,1));min-height:calc(100dvh / var(--gh-z,1))}
+/* con el viewport efectivo más angosto, el botón de Google necesita lugar: se achican los rellenos del login */
+html[data-escala="130"] .gh-login{padding-left:8px;padding-right:8px}
+html[data-escala="130"] .gh-login-card{padding-left:14px;padding-right:14px}
+html[data-escala="150"] .gh-login{padding-left:4px;padding-right:4px}
+html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
+.gh-ctl{position:fixed;top:16px;right:16px;z-index:60;display:flex;align-items:center;gap:8px}
+.gh-ctl .gh-esc{background:var(--card);border:1px solid var(--line);color:var(--ink-soft);box-shadow:0 2px 6px rgba(0,0,0,.08)}
+@media (max-width:640px){.gh-ctl{position:static;justify-content:flex-end;padding:12px 16px 0}}
+.toolbar>div{flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -297,7 +325,10 @@
   <button type="button" id="btnRecargarVersion">Recargar</button>
 </div>
 
+<div class="gh-ctl">
+<button type="button" class="gh-esc" id="btnEscala" aria-label="Agrandar letra" title="Agrandar letra"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg><span class="gh-esc-n" id="escalaNivel" aria-hidden="true"></span></button><span class="gh-esc-sr" id="escalaLive" role="status" aria-live="polite"></span>
 <button id="themeToggle" type="button" aria-label="Cambiar tema claro/oscuro"></button>
+</div>
 
 <div id="loginScreen" class="gh-login">
   <div class="gh-login-card">
@@ -2432,6 +2463,25 @@
     };
     reader.readAsDataURL(file);
   });
+</script>
+<script>
+/* Tamaño de interfaz: 100 -> 115 -> 130 -> 150 -> 100. Se recuerda por app; sin localStorage sigue andando. */
+(function(){
+  var K='gh-escala:gh-seguimiento-mediciones',N=[100,115,130,150],h=document.documentElement,b=document.getElementById('btnEscala');
+  if(!b)return;
+  function leer(){try{var v=parseInt(localStorage.getItem(K),10);return N.indexOf(v)<0?100:v}catch(e){return 100}}
+  function poner(v,avisar){
+    if(v===100)h.removeAttribute('data-escala');else h.setAttribute('data-escala',v);
+    document.getElementById('escalaNivel').textContent=v===100?'':v+'%';
+    b.title='Agrandar letra (ahora '+v+'%)';
+    if(avisar)document.getElementById('escalaLive').textContent='Tamaño de la interfaz: '+v+'%';
+  }
+  var v=leer();poner(v,false);
+  b.addEventListener('click',function(){
+    v=N[(N.indexOf(v)+1)%N.length];poner(v,true);
+    try{if(v===100)localStorage.removeItem(K);else localStorage.setItem(K,String(v))}catch(e){}
+  });
+})();
 </script>
 </body>
 </html>
