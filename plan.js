@@ -235,7 +235,7 @@
     equipos.sort(function (a, b) { return ORDEN.indexOf(a.estado) - ORDEN.indexOf(b.estado); });
 
     return {
-      titulo: item.titulo, muestras: item.muestras || '', filas: filas, fichas: fichas.map(function (p) { return p.id; }),
+      titulo: item.titulo, puesto: item.puesto || '', muestras: item.muestras || '', filas: filas, fichas: fichas.map(function (p) { return p.id; }),
       metodos: Object.keys(metodos).map(function (k) { return metodos[k]; }), discrepancias: discrepancias, avisosMetodo: avisosMetodo,
       procedimientos: Object.keys(procs).map(function (k) { return procs[k]; }),
       legislacion: Object.keys(legis).map(function (k) { return legis[k]; }),

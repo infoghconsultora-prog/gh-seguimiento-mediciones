@@ -19,7 +19,7 @@
 <link rel="apple-touch-icon" sizes="167x167" href="icons/icon-167.png">
 <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="plan.js?v=2026-10-19T16:25"></script>
+<script src="plan.js?v=2026-10-23T15:36"></script>
 <style>
   :root{
     --verde:      #4c9a2a; --verde-bg:   #eaf4e2;
@@ -106,6 +106,12 @@
   .plan.abierto .plan-body{display:block;}
   .plan-nota{font-size:12px;color:var(--ink-soft);margin:0 0 10px;}
   .plan-item{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:10px;}
+  .plan-item-head{cursor:pointer;user-select:none;margin-bottom:0 !important;}
+  .plan-item-head .chev{color:var(--ink-soft);transition:transform .2s;font-size:11px;}
+  .plan-item.abierto .plan-item-head .chev{transform:rotate(90deg);}
+  .plan-item-body{display:none;margin-top:10px;}
+  .plan-item.abierto .plan-item-body{display:block;}
+  .plan-acciones{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px;}
   .plan-item h5{margin:0 0 8px;font-size:13px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
   .plan-item h5 span{font-weight:500;color:var(--ink-soft);font-size:12px;}
   .plan-filas{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;}
@@ -430,7 +436,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
   // para que una pestaña vieja se entere sola de que hay una version mas
   // nueva, en vez de quedarse corriendo el codigo con el que cargo para
   // siempre. Mismo mecanismo que en Seguimiento Ambiental.
-  var FRONTEND_VERSION = '2026-10-19T16:25';
+  var FRONTEND_VERSION = '2026-10-23T15:36';
 
   var idToken = null;
   var SERVICIOS = [];
@@ -1127,11 +1133,15 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
   }
 
   // Plan de una medición de la tabla: el ítem de la OT que se llama igual que la medición.
-  function planDeMedicion_(s, m, key) {
+  function planDeMedicion_(s, m, key, idx) {
     var st = PLAN_ESTADO[key];
     if (!CATALOGO_IX || !st || !st.items || !st.items.length) return null;
+    // Primero por título si es único; si varios ítems se llaman igual (los puestos de una misma matriz),
+    // por posición: las mediciones se cargaron en el mismo orden que los ítems de la cotización.
     var t = GHPlan.norm(m.tipoMuestra);
-    var item = st.items.filter(function (it) { return GHPlan.norm(it.titulo) === t; })[0];
+    var porTitulo = st.items.filter(function (it) { return GHPlan.norm(it.titulo) === t; });
+    var item = porTitulo.length === 1 ? porTitulo[0]
+      : (st.items.length === (s.mediciones || []).length ? st.items[idx] : null);
     if (!item) return null;
     var p = GHPlan.planDeItem(CATALOGO_IX, item, EQUIPOS_CAL, st.correcciones);
     return p.fichas.length ? p : null;
@@ -1148,7 +1158,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
   }
 
   function planEstado_(key) {
-    if (!PLAN_ESTADO[key]) PLAN_ESTADO[key] = { abierto: false, cargando: false, items: undefined, correcciones: {}, error: '', editando: {}, jornada: 480 };
+    if (!PLAN_ESTADO[key]) PLAN_ESTADO[key] = { abierto: false, cargando: false, items: undefined, correcciones: {}, error: '', editando: {}, jornada: 480, itemsAbiertos: {} };
     return PLAN_ESTADO[key];
   }
 
@@ -1250,7 +1260,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
       ((no || red) ? '<h6 style="margin-top:10px">No comparten</h6>' + no + red : '') + '</div>';
   }
 
-  function dibujarPlanItem_(it, key, st) {
+  function dibujarPlanItem_(it, key, st, idx) {
     var filas = it.filas.map(function (f) {
       var fichaNombre = f.ficha ? CATALOGO_IX.porId[f.ficha].nombre : '';
       var conf = f.ignorada ? null : CONFIANZA_BADGE[f.confianza];
@@ -1303,12 +1313,15 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
     }).join('') + '</ul>' : '<p class="sub">No requiere equipos calibrados.</p>';
     var cc = it.planillasCC.length ? '<h6 style="margin-top:10px">Cadena de custodia</h6><ul>' + it.planillasCC.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>' : '';
 
-    return '<div class="plan-item"><h5>' + esc(it.titulo || 'Ítem') + (it.muestras ? ' <span>' + esc(it.muestras) + ' muestra(s)</span>' : '') + ' ' + estadoBadge +
+    var abierto = !!st.itemsAbiertos[idx];
+    return '<div class="plan-item' + (abierto ? ' abierto' : '') + '"><h5 class="plan-item-head" data-item="' + idx + '"><span class="chev">▶</span> ' +
+      esc(it.titulo || 'Ítem') + (it.puesto ? ' <span style="font-weight:700;color:var(--ink)">· ' + esc(it.puesto) + '</span>' : '') + (it.muestras ? ' <span>' + esc(it.muestras) + ' muestra(s)</span>' : '') + ' ' + estadoBadge +
       (it.sinFicha ? ' <span class="badge rojo">' + it.sinFicha + ' sin ficha</span>' : '') +
       (it.dudosas ? ' <span class="badge amarillo">' + it.dudosas + ' para revisar</span>' : '') + '</h5>' +
+      '<div class="plan-item-body">' +
       (it.filas.length ? tabla : '') +
       (conocidas ? '<div class="plan-cols"><div><h6>Métodos cotizados</h6>' + metodos + '<h6 style="margin-top:10px">Procedimientos GH</h6>' + procs + (legis ? '<h6 style="margin-top:10px">Legislación</h6>' + legis : '') + '</div>' +
-        '<div><h6>Equipos y calibración</h6>' + equipos + cc + '</div></div>' + dibujarMuestreo_(it, st) : '<p class="plan-nota">No se encontró ninguna ficha para este ítem: elegí la que corresponde arriba.</p>') + '</div>';
+        '<div><h6>Equipos y calibración</h6>' + equipos + cc + '</div></div>' + dibujarMuestreo_(it, st) : '<p class="plan-nota">No se encontró ninguna ficha para este ítem: elegí la que corresponde arriba.</p>') + '</div></div>';
   }
 
   function buildPlanTecnico_(s, key) {
@@ -1353,7 +1366,9 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
         if (s.checklist && s.checklist.cotizacionUrl) {
           aviso = '<p class="plan-nota">Armado con lo que dice la OT. Si la OT cambió, <button type="button" class="mini" data-leer="1">volver a leerla</button>. Lo que confirmes queda guardado para todas las cotizaciones.</p>';
         }
-        body.innerHTML = aviso + '<label class="m-jornada">Jornada de muestreo: <input type="number" min="1" step="10" data-jornada="1" value="' + st.jornada + '"> min</label>' + plan.map(function (it) { return dibujarPlanItem_(it, key, st); }).join('');
+        body.innerHTML = aviso + '<div class="plan-acciones"><label class="m-jornada" style="margin:0">Jornada de muestreo: <input type="number" min="1" step="10" data-jornada="1" value="' + st.jornada + '"> min</label>' +
+          '<button type="button" class="mini" data-todos="abrir">Expandir todo</button><button type="button" class="mini" data-todos="cerrar">Contraer todo</button></div>' +
+          plan.map(function (it, i) { return dibujarPlanItem_(it, key, st, i); }).join('');
       }
     }
     cont.appendChild(body);
@@ -1363,6 +1378,17 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
       if (t.getAttribute && t.getAttribute('data-reintentar')) { ev.stopPropagation(); cargarPlan_(key); }
       else if (t.getAttribute && t.getAttribute('data-leer')) { ev.stopPropagation(); leerCotizacionDe_(key); }
       else if (t.getAttribute && t.getAttribute('data-cambiar')) { ev.stopPropagation(); st.editando[t.getAttribute('data-cambiar')] = true; render(); }
+      else if (t.getAttribute && t.getAttribute('data-todos')) {
+        ev.stopPropagation();
+        var abrir = t.getAttribute('data-todos') === 'abrir';
+        (plan || []).forEach(function (_, i) { st.itemsAbiertos[i] = abrir; });
+        render();
+      } else if (t.closest && t.closest('[data-item]') && !(t.closest('a'))) {
+        ev.stopPropagation();
+        var n = t.closest('[data-item]').getAttribute('data-item');
+        st.itemsAbiertos[n] = !st.itemsAbiertos[n];
+        render();
+      }
     });
     cont.addEventListener('change', function (ev) {
       var t = ev.target;
@@ -1391,7 +1417,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
     var rows = s.mediciones.map(function (m, i) {
       var calib = detalle[i] || { estado: 'sin_match' };
       // Con la OT leída, los equipos salen de TODOS los parámetros del ítem (bomba + balanza + analizadores...)
-      var plan = planDeMedicion_(s, m, s.presupuestoGH || s.claveServicio || (s.empresa + '|' + s.fechaMuestreo));
+      var plan = planDeMedicion_(s, m, s.presupuestoGH || s.claveServicio || (s.empresa + '|' + s.fechaMuestreo), i);
       var celdaEquipos;
       if (plan) {
         celdaEquipos = '<span class="badge ' + (PLAN_ESTADO_COLOR[plan.estado] || 'gris') + '">' + esc(ETQ_PLAN[plan.estado] || plan.estado) + '</span>' +
