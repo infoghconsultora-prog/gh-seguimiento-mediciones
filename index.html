@@ -281,11 +281,11 @@
   :root[data-theme="light"] header{background:linear-gradient(180deg, #ffffff 0%, #f2f6ec 100%);}
 
   #themeToggle{
-    display:flex; align-items:center; gap:6px; min-height:44px;
-    background:var(--card); border:1px solid var(--line); border-radius:999px;
-    padding:6px 12px; font-size:13px; font-weight:600; color:var(--ink-soft);
+    flex:none; width:44px; height:44px; display:inline-grid; place-items:center; padding:0;
+    background:var(--card); border:1px solid var(--line); border-radius:50%; color:var(--ink-soft);
     cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,.08);
   }
+  #themeToggle svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
   #themeToggle:hover{border-color:var(--brand-dark); color:var(--brand-dark);}
 </style>
 <script>try{var e=localStorage.getItem('gh-escala:gh-seguimiento-mediciones');if(e==='115'||e==='130'||e==='150')document.documentElement.setAttribute('data-escala',e)}catch(_){}</script>
@@ -303,6 +303,7 @@ html[data-escala="150"]{zoom:1.5;--gh-z:1.5}
 .gh-esc-n{position:absolute;left:50%;transform:translateX(-50%);bottom:-9px;min-width:30px;padding:0 4px;border-radius:999px;background:#4a7a1e;color:#fff;
   font:700 11px/16px -apple-system,"SF Pro Text",system-ui,sans-serif;text-align:center}
 .gh-esc-n:empty{display:none}
+.gh-esc[hidden]{display:none}
 .gh-esc-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 @supports not (zoom:1){.gh-esc{display:none}}
 /* con zoom, vh/dvh también se multiplican: se divide para que las pantallas altas sigan midiendo el alto real */
@@ -312,9 +313,9 @@ html[data-escala="130"] .gh-login{padding-left:8px;padding-right:8px}
 html[data-escala="130"] .gh-login-card{padding-left:14px;padding-right:14px}
 html[data-escala="150"] .gh-login{padding-left:4px;padding-right:4px}
 html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
-.gh-ctl{position:fixed;top:16px;right:16px;z-index:60;display:flex;align-items:center;gap:8px}
+.gh-ctl{position:absolute;top:12px;right:16px;z-index:60;display:flex;align-items:center;gap:8px}
+#dashboardScreen{padding-top:64px}
 .gh-ctl .gh-esc{background:var(--card);border:1px solid var(--line);color:var(--ink-soft);box-shadow:0 2px 6px rgba(0,0,0,.08)}
-@media (max-width:640px){.gh-ctl{position:static;justify-content:flex-end;padding:12px 16px 0}}
 .toolbar>div{flex-wrap:wrap}
 </style>
 </head>
@@ -326,7 +327,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
 </div>
 
 <div class="gh-ctl">
-<button type="button" class="gh-esc" id="btnEscala" aria-label="Agrandar letra" title="Agrandar letra"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg><span class="gh-esc-n" id="escalaNivel" aria-hidden="true"></span></button><span class="gh-esc-sr" id="escalaLive" role="status" aria-live="polite"></span>
+<button type="button" class="gh-esc" id="btnEscalaMenos" aria-label="Achicar letra" title="Achicar letra" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M8 11h6"/></svg></button><button type="button" class="gh-esc" id="btnEscala" aria-label="Agrandar letra" title="Agrandar letra"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/></svg><span class="gh-esc-n" id="escalaNivel" aria-hidden="true"></span></button><span class="gh-esc-sr" id="escalaLive" role="status" aria-live="polite"></span>
 <button id="themeToggle" type="button" aria-label="Cambiar tema claro/oscuro"></button>
 </div>
 
@@ -609,7 +610,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
   /* ---------- theme toggle ---------- */
   function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
-    document.getElementById('themeToggle').textContent = theme === 'dark' ? '☀️ Modo claro' : '🌙 Modo oscuro';
+    document.getElementById('themeToggle').innerHTML = theme === 'dark' ? '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
   }
   function initTheme() {
     var saved = localStorage.getItem('gh-theme');
@@ -2472,15 +2473,14 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
   function leer(){try{var v=parseInt(localStorage.getItem(K),10);return N.indexOf(v)<0?100:v}catch(e){return 100}}
   function poner(v,avisar){
     if(v===100)h.removeAttribute('data-escala');else h.setAttribute('data-escala',v);
-    document.getElementById('escalaNivel').textContent=v===100?'':v+'%';
+    document.getElementById('escalaNivel').textContent=v===100?'':v+'%';var m=document.getElementById('btnEscalaMenos');if(m)m.hidden=(v===100);
     b.title='Agrandar letra (ahora '+v+'%)';
     if(avisar)document.getElementById('escalaLive').textContent='Tamaño de la interfaz: '+v+'%';
   }
   var v=leer();poner(v,false);
-  b.addEventListener('click',function(){
-    v=N[(N.indexOf(v)+1)%N.length];poner(v,true);
-    try{if(v===100)localStorage.removeItem(K);else localStorage.setItem(K,String(v))}catch(e){}
-  });
+  function ir(n){v=n;poner(v,true);try{if(v===100)localStorage.removeItem(K);else localStorage.setItem(K,String(v))}catch(e){}}
+  b.addEventListener('click',function(){ir(N[(N.indexOf(v)+1)%N.length])});
+  var m=document.getElementById('btnEscalaMenos');if(m)m.addEventListener('click',function(){ir(N[Math.max(0,N.indexOf(v)-1)])});
 })();
 </script>
 </body>
