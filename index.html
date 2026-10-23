@@ -5,6 +5,19 @@
 <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dashboard de Seguimiento de Mediciones — GH Consultora</title>
+<meta name="theme-color" content="#f7f8f4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14170f" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mediciones">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152.png">
+<link rel="apple-touch-icon" sizes="167x167" href="icons/icon-167.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="plan.js?v=2026-10-19T16:25"></script>
 <style>
@@ -25,42 +38,62 @@
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
   a{color:inherit;}
 
-  #loginScreen{ min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
-  .login-card{ background:var(--card); border-radius:20px; padding:40px 36px;
-    max-width:420px; width:100%; text-align:center;
-    box-shadow:0 2px 4px rgba(43,47,38,.10), 0 16px 40px rgba(43,47,38,.14); }
-  .login-logo{ display:block; height:64px; margin:0 auto 18px; }
-  #loginScreen h1{ font-size:22px; line-height:28px; font-weight:600; margin:0 0 8px; letter-spacing:-.35px; }
-  #loginScreen p{ font-size:15px; line-height:20px; color:var(--ink-soft); margin:0 0 24px; }
-  #gsiButton{ display:flex; justify-content:center; }
-  #loginSpinner{ display:none; margin-top:18px; }
-  .loading-track{ position:relative; width:220px; height:4px; margin:0 auto;
-    border-radius:999px; background:var(--line); overflow:hidden; }
-  .loading-glow{ position:absolute; top:0; left:0; height:100%; width:36%; border-radius:999px;
-    background:linear-gradient(90deg, transparent, var(--brand-dark) 50%, transparent);
-    animation:barrido 1.5s ease-in-out infinite; }
-  @keyframes barrido{
-    0%{ transform:translateX(-110%); }
-    100%{ transform:translateX(390%); }
+  /* ---------- Login GH (idéntico en todas las apps de la consultora) ----------
+     Fondo con halo verde (el de seguimiento-ambiental), tarjeta, logo GH grande centrado,
+     NOMBRE DE LA HERRAMIENTA y botón de Google. Autónomo: no depende de las variables de la app.
+     Marcado:  <div id="loginScreen" class="gh-login"><div class="gh-login-card">
+                 <img class="gh-login-logo" src="logo-gh.png" alt="GH Consultora"><h1>Nombre</h1><p>…</p>
+                 <div id="gsiButton"></div> … spinner / error … </div></div> */
+  .gh-login{
+    --gl-bg:#f7f8f4; --gl-card:#ffffff; --gl-ink:#2b2f26; --gl-ink-2:#5b6058; --gl-line:#e7eae2;
+    --gl-brand:#8dc63f; --gl-accent:#4a7a1e; --gl-red:#b3261e; --gl-red-bg:#f9e0de;
+    --gl-shadow:0 2px 4px rgba(43,47,38,.10), 0 16px 40px rgba(43,47,38,.14);
+    position:relative; isolation:isolate; overflow:hidden; box-sizing:border-box;
+    min-height:100vh; min-height:100dvh; display:flex; align-items:center; justify-content:center;
+    padding:24px 16px; background:var(--gl-bg); color:var(--gl-ink);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; text-align:left;
   }
-  @media (prefers-reduced-motion: reduce){ .loading-glow{ animation:none; width:100%; opacity:.5; } }
-  .loading-msg{ margin-top:12px; font-size:13px; line-height:18px; color:var(--ink-soft);
-    transition:opacity .3s cubic-bezier(0.32,0.72,0,1); min-height:18px; }
-  #loginError{ display:none; font-size:15px; line-height:20px; color:var(--rojo); font-weight:600;
-    margin-top:14px; background:var(--rojo-bg); border-radius:10px; padding:12px 14px; }
-  #loginError button{ display:block; margin:10px auto 0; border:none; cursor:pointer;
-    background:var(--rojo); color:#fff; font-size:14px; font-weight:600;
-    border-radius:999px; padding:8px 18px; }
-  #loginError button:active{ transform:scale(.96); }
-  #loginError .rastro{ font-size:12px; font-weight:400; opacity:.8; margin-top:6px; }
-  @media (prefers-color-scheme: dark){
-    :root{ --login-acento:#8dc63f; --login-rojo:#ff8a80; }
-  }
-  :root[data-theme="dark"]{ --login-acento:#8dc63f; --login-rojo:#ff8a80; }
-  :root[data-theme="light"]{ --login-acento:#4a7a1e; --login-rojo:#b3261e; }
-  .loading-glow{ background:linear-gradient(90deg, transparent, var(--login-acento, var(--brand-dark)) 50%, transparent); }
-  #loginError{ color:var(--login-rojo, var(--rojo)); }
-  #loginError button{ background:var(--rojo); }
+  @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]) .gh-login{
+    --gl-bg:#14170f; --gl-card:#1c211a; --gl-ink:#eef0e8; --gl-ink-2:#a7ad9d; --gl-line:#2a3025;
+    --gl-accent:#8dc63f; --gl-red:#c9372e; --gl-red-bg:#2b1513;
+    --gl-shadow:0 2px 4px rgba(0,0,0,.38), 0 16px 40px rgba(0,0,0,.48); }}
+  :root[data-theme="dark"] .gh-login{
+    --gl-bg:#14170f; --gl-card:#1c211a; --gl-ink:#eef0e8; --gl-ink-2:#a7ad9d; --gl-line:#2a3025;
+    --gl-accent:#8dc63f; --gl-red:#c9372e; --gl-red-bg:#2b1513;
+    --gl-shadow:0 2px 4px rgba(0,0,0,.38), 0 16px 40px rgba(0,0,0,.48); }
+  .gh-login *,.gh-login *::before,.gh-login *::after{ box-sizing:border-box; }
+  /* halo verde difuso arriba: el degradado de marca */
+  .gh-login::before{ content:""; position:fixed; top:-160px; left:-80px; right:-80px; height:420px;
+    z-index:-1; pointer-events:none; filter:blur(60px); opacity:.55;
+    background:
+      radial-gradient(circle at 18% 30%, color-mix(in srgb,var(--gl-brand) 38%,transparent), transparent 62%),
+      radial-gradient(circle at 76% 12%, color-mix(in srgb,var(--gl-accent) 30%,transparent), transparent 58%); }
+  .gh-login-card{ background:var(--gl-card); border-radius:20px; padding:40px 36px; max-width:420px; width:100%;
+    text-align:center; box-shadow:var(--gl-shadow); }
+  .gh-login-logo{ display:block; height:72px; width:auto; max-width:100%; margin:0 auto 18px; }
+  .gh-login h1{ font-size:22px; line-height:28px; font-weight:600; margin:0 0 8px; letter-spacing:-.35px; color:var(--gl-ink); text-align:center; }
+  .gh-login p{ font-size:15px; line-height:20px; color:var(--gl-ink-2); margin:0 0 24px; }
+  .gh-login #gsiButton{ display:flex; justify-content:center; min-height:44px; color-scheme:light; }
+  .gh-login #loginSpinner{ display:none; margin-top:18px; }
+  .gh-login .loading-track{ position:relative; width:220px; max-width:100%; height:4px; margin:0 auto;
+    border-radius:999px; background:var(--gl-line); overflow:hidden; }
+  .gh-login .loading-glow{ position:absolute; top:0; left:0; height:100%; width:36%; border-radius:999px;
+    background:linear-gradient(90deg, transparent, var(--gl-accent) 50%, transparent);
+    animation:gl-barrido 1.5s ease-in-out infinite; }
+  @keyframes gl-barrido{ 0%{ transform:translateX(-110%); } 100%{ transform:translateX(390%); } }
+  .gh-login .loading-msg{ margin-top:12px; font-size:13px; line-height:18px; color:var(--gl-ink-2);
+    transition:opacity .3s cubic-bezier(0.32,0.72,0,1); min-height:18px; text-align:center; }
+  .gh-login #loginError{ display:none; font-size:15px; line-height:20px; color:var(--gl-red); font-weight:600;
+    margin-top:14px; background:var(--gl-red-bg); border-radius:10px; padding:12px 14px; text-align:center; }
+  .gh-login #loginError button{ display:block; margin:10px auto 0; border:none; cursor:pointer;
+    background:var(--gl-red); color:#fff; font-size:14px; font-weight:600; border-radius:999px; padding:8px 18px; }
+  .gh-login #loginError button:active{ transform:scale(.96); }
+  .gh-login #loginError .rastro{ font-size:12px; font-weight:400; opacity:.8; margin-top:6px; }
+  @media (max-width:420px){ .gh-login-card{ padding:32px 22px; } }
+  @media (prefers-reduced-motion:reduce){
+    .gh-login .loading-glow{ animation:none; width:100%; opacity:.55; transform:none; }
+    .gh-login .loading-msg{ transition:none; } }
 
 
   /* ---------- plan técnico (cruce cotización ↔ Biblioteca ↔ Calibraciones) ---------- */
@@ -266,9 +299,9 @@
 
 <button id="themeToggle" type="button" aria-label="Cambiar tema claro/oscuro"></button>
 
-<div id="loginScreen">
-  <div class="login-card">
-    <img class="login-logo" src="logo_gh.png" alt="GH Consultora">
+<div id="loginScreen" class="gh-login">
+  <div class="gh-login-card">
+    <img class="gh-login-logo" src="logo_gh.png" alt="GH Consultora">
     <h1>Seguimiento de Mediciones</h1>
     <p>GH Consultora · Mediciones y Monitoreos<br>Iniciá sesión con una cuenta de Google autorizada para ver el estado de cada servicio, del ingreso a la entrega.</p>
     <div id="gsiButton"></div>
