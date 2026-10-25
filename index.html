@@ -19,7 +19,7 @@
 <link rel="apple-touch-icon" sizes="167x167" href="icons/icon-167.png">
 <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="plan.js?v=2026-10-23T15:48"></script>
+<script src="plan.js?v=2026-10-25T23:41"></script>
 <style>
   :root{
     --verde:      #4c9a2a; --verde-bg:   #eaf4e2;
@@ -95,6 +95,22 @@
     .gh-login .loading-glow{ animation:none; width:100%; opacity:.55; transform:none; }
     .gh-login .loading-msg{ transition:none; } }
 
+
+  /* ---------- elegir carpeta de la empresa ---------- */
+  #carpetaOverlay{display:none;position:fixed;inset:0;background:rgba(20,23,15,.5);align-items:center;justify-content:center;padding:16px;z-index:60;}
+  #carpetaCard{background:var(--card);border-radius:var(--radius);padding:22px;width:100%;max-width:460px;max-height:90vh;display:flex;flex-direction:column;gap:10px;}
+  #carpetaCard h2{margin:0;font-size:17px;}
+  #carpetaCard .hint{margin:0;font-size:12.5px;color:var(--ink-soft);}
+  #carpetaBuscar{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font-size:14px;}
+  #carpetaLista{overflow:auto;border:1px solid var(--line);border-radius:8px;min-height:120px;max-height:46vh;}
+  #carpetaLista .grupo{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);padding:8px 10px 4px;}
+  #carpetaLista button{display:block;width:100%;text-align:left;border:0;background:transparent;color:var(--ink);padding:9px 12px;font-size:14px;cursor:pointer;border-top:1px solid var(--line);}
+  #carpetaLista button:hover{background:var(--gris-bg);}
+  #carpetaLista button.sel{background:var(--verde-bg);font-weight:700;}
+  #carpetaStatus{font-size:12.5px;min-height:16px;}
+  #carpetaStatus.err{color:var(--rojo);} #carpetaStatus.ok{color:var(--verde);}
+  #carpetaCard .nota{font-size:12px;color:var(--ink-soft);}
+  #carpetaActions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;}
 
   /* ---------- plan técnico (cruce cotización ↔ Biblioteca ↔ Calibraciones) ---------- */
   .plan{border:1px solid var(--line);border-radius:10px;margin-bottom:16px;background:var(--card);}
@@ -409,6 +425,22 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
   </footer>
 </div>
 
+<div id="carpetaOverlay">
+  <div id="carpetaCard">
+    <h2>Carpeta de la empresa</h2>
+    <p class="hint" id="carpetaHint"></p>
+    <input type="search" id="carpetaBuscar" placeholder="Buscar carpeta…" autocomplete="off">
+    <div id="carpetaLista" role="listbox"></div>
+    <div id="carpetaStatus"></div>
+    <div class="nota">Si no está, creala en Drive dentro de «1. INFORMES» y tocá «Actualizar lista». No se crea ninguna carpeta sola.</div>
+    <div id="carpetaActions">
+      <button class="btn" id="carpetaActualizar" type="button">Actualizar lista</button>
+      <button class="btn" id="carpetaMasTarde" type="button">Elegir después</button>
+      <button class="btn primary" id="carpetaElegir" type="button" disabled>Usar esta carpeta</button>
+    </div>
+  </div>
+</div>
+
 <div id="modalOverlay">
   <div id="modalCard">
     <h2>Nueva medición</h2>
@@ -436,7 +468,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
   // para que una pestaña vieja se entere sola de que hay una version mas
   // nueva, en vez de quedarse corriendo el codigo con el que cargo para
   // siempre. Mismo mecanismo que en Seguimiento Ambiental.
-  var FRONTEND_VERSION = '2026-10-23T15:48';
+  var FRONTEND_VERSION = '2026-10-25T23:41';
 
   var idToken = null;
   var SERVICIOS = [];
@@ -511,7 +543,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
    *    despues de que fallo un intento.
    */
   var BACKEND_ESPEJO = 'https://script.google.com/macros/s/AKfycbwz5Eu-ScQ0qgUJQpMDE8GyotV92qIZNZn4aL1zsb269LiW0USACRPrZ1uwGG1POfxnTQ/exec';
-  var ACCIONES_LECTURA = { getData: 1, listarTemplatesCC: 1, listarBorrados: 1, getCatalogo: 1, getPlan: 1, getPlanes: 1, getCalibraciones: 1 };
+  var ACCIONES_LECTURA = { getData: 1, listarTemplatesCC: 1, listarBorrados: 1, getCatalogo: 1, getPlan: 1, getPlanes: 1, getCalibraciones: 1, listarCarpetasEmpresas: 1 };
   var ACCIONES_ARCHIVO = { cargarCotizacion: 1, reemplazarCotizacion: 1, subirCCPersonalizada: 1, subirArchivoPaso: 1 };
   var PLAN_LECTURA   = { escalones: [0, 4000, 8000, 13000, 20000], max: 5, porIntento: 25000, tope: 50000 };
   var PLAN_ESCRITURA = { escalones: [0, 15000, 30000], max: 3, porIntento: 60000, tope: 90000 };
@@ -777,6 +809,8 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
     var motivo = (data && data.error) || 'error desconocido';
     if (motivo === 'auth_failed') {
       avisar('Se venció la sesión. Cerrá sesión y volvé a entrar para seguir trabajando.', 'error');
+    } else if (motivo === 'elegir_carpeta_empresa' || motivo === 'varias_carpetas_posibles') {
+      avisar((contexto ? contexto + ': ' : '') + 'falta elegir la carpeta de la empresa. Usá «Elegir carpeta» en el paso 1 (Ingreso) del servicio.', 'error');
     } else {
       avisar((contexto ? contexto + ': ' : '') + motivo, 'error');
     }
@@ -1508,7 +1542,8 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
       .filter(function (t) { return !!t; });
 
     wrap.appendChild(stepPaso_('1. Ingreso', true, [
-      cotizacionItem_(s, c, update_)
+      cotizacionItem_(s, c, update_),
+      carpetaEmpresaItem_(s, c, key)
     ]));
 
     wrap.appendChild(stepPaso_('2. Orden de Trabajo', !!c.cotizacionUrl, [
@@ -2081,6 +2116,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
         btn.disabled = false;
         if (!data.ok) {
           estado.style.color = 'var(--rojo)';
+          if (pedirCarpetaSiFalta_(data, s, s.presupuestoGH || s.claveServicio, function (m) { estado.textContent = m; })) return;
           estado.textContent = 'Error: ' + (data.error || 'desconocido');
           return;
         }
@@ -2117,6 +2153,120 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
     div.appendChild(input);
     div.appendChild(label);
     return div;
+  }
+
+
+  /* ---------- carpeta de la empresa ---------- */
+  var CARPETAS_EMPRESA = null;      // [{id, nombre}] de "1. INFORMES"
+  var CARPETA_ELEGIDA = {};         // por servicio, solo para mostrar el nombre en esta sesion
+  var CHOOSER = null;               // { key, empresa, ordenCompra, id, alTerminar }
+  var PALABRAS_SUELTAS = ['sa', 'srl', 'sas', 'sociedad', 'anonima', 'ltda', 'bodegas', 'bodega', 'finca', 'compania', 'cia',
+    'empresa', 'grupo', 'sh', 'de', 'del', 'la', 'los', 'las', 'el', 'y', 'e', 'the'];
+
+  function tokensNombre_(t) {
+    return GHPlan.norm(t).replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(function (w) { return w.length >= 4 && PALABRAS_SUELTAS.indexOf(w) === -1; });
+  }
+  // cuantas palabras de la empresa se parecen (mismas primeras 5 letras) a alguna de la carpeta
+  function parecidoCarpeta_(empresa, carpeta) {
+    var a = tokensNombre_(empresa), b = tokensNombre_(carpeta), n = 0;
+    a.forEach(function (x) { if (b.some(function (y) { return y.slice(0, 5) === x.slice(0, 5); })) n++; });
+    return n;
+  }
+
+  function pintarListaCarpetas_() {
+    var lista = document.getElementById('carpetaLista');
+    var q = GHPlan.norm(document.getElementById('carpetaBuscar').value || '');
+    var todas = (CARPETAS_EMPRESA || []).filter(function (c) { return !q || GHPlan.norm(c.nombre).indexOf(q) !== -1; });
+    if (!CARPETAS_EMPRESA) { lista.innerHTML = '<div class="grupo">Cargando las carpetas…</div>'; return; }
+    if (!todas.length) { lista.innerHTML = '<div class="grupo">No hay carpetas con ese nombre.</div>'; return; }
+    var parecidas = q ? [] : todas.filter(function (c) { return parecidoCarpeta_(CHOOSER.empresa, c.nombre) > 0; });
+    var resto = todas.filter(function (c) { return parecidas.indexOf(c) === -1; });
+    function op(c) { return '<button type="button" data-id="' + esc(c.id) + '" class="' + (CHOOSER.id === c.id ? 'sel' : '') + '">' + esc(c.nombre) + '</button>'; }
+    lista.innerHTML = (parecidas.length ? '<div class="grupo">Parecidas a «' + esc(CHOOSER.empresa) + '»</div>' + parecidas.map(op).join('') : '') +
+      (resto.length ? '<div class="grupo">' + (parecidas.length ? 'Todas las demás' : 'Carpetas') + '</div>' + resto.map(op).join('') : '');
+    document.getElementById('carpetaElegir').disabled = !CHOOSER.id;
+  }
+
+  function cargarCarpetasEmpresa_(forzar) {
+    if (CARPETAS_EMPRESA && !forzar) { pintarListaCarpetas_(); return; }
+    CARPETAS_EMPRESA = null; pintarListaCarpetas_();
+    callBackend('listarCarpetasEmpresas', {}).then(function (d) {
+      if (!d || !d.ok) { var st = document.getElementById('carpetaStatus'); st.className = 'err'; st.textContent = 'No se pudo leer la lista de carpetas (' + ((d && d.error) || 'error') + ').'; CARPETAS_EMPRESA = []; pintarListaCarpetas_(); return; }
+      CARPETAS_EMPRESA = d.carpetas || [];
+      pintarListaCarpetas_();
+    }).catch(function () {
+      var st = document.getElementById('carpetaStatus'); st.className = 'err'; st.textContent = 'No se pudo conectar con el backend.';
+      CARPETAS_EMPRESA = []; pintarListaCarpetas_();
+    });
+  }
+
+  // key = clave del servicio (Presupuesto GH); alTerminar se llama cuando ya quedó elegida
+  function abrirElegirCarpeta_(key, empresa, ordenCompra, alTerminar, motivo) {
+    CHOOSER = { key: key, empresa: empresa || '', ordenCompra: ordenCompra || '', id: '', alTerminar: alTerminar };
+    document.getElementById('carpetaHint').textContent = (motivo ? motivo + ' ' : '') +
+      'La cotización dice «' + (empresa || 'sin nombre') + '». Elegí la carpeta de esa empresa dentro de «1. INFORMES»; ahí van la OT y todos los archivos del servicio.';
+    document.getElementById('carpetaBuscar').value = '';
+    var st = document.getElementById('carpetaStatus'); st.className = ''; st.textContent = '';
+    document.getElementById('carpetaElegir').disabled = true;
+    document.getElementById('carpetaOverlay').style.display = 'flex';
+    cargarCarpetasEmpresa_(true);   // siempre fresca: puede que acaben de crear la carpeta en Drive
+  }
+  function cerrarElegirCarpeta_() { document.getElementById('carpetaOverlay').style.display = 'none'; CHOOSER = null; }
+
+  document.getElementById('carpetaBuscar').addEventListener('input', pintarListaCarpetas_);
+  document.getElementById('carpetaLista').addEventListener('click', function (ev) {
+    var b = ev.target.closest && ev.target.closest('button[data-id]');
+    if (!b || !CHOOSER) return;
+    CHOOSER.id = b.getAttribute('data-id');
+    pintarListaCarpetas_();
+  });
+  document.getElementById('carpetaActualizar').addEventListener('click', function () { cargarCarpetasEmpresa_(true); });
+  document.getElementById('carpetaMasTarde').addEventListener('click', function () { cerrarElegirCarpeta_(); render(); });
+  document.getElementById('carpetaElegir').addEventListener('click', function () {
+    if (!CHOOSER || !CHOOSER.id) return;
+    var btn = this, st = document.getElementById('carpetaStatus'), ch = CHOOSER;
+    btn.disabled = true; st.className = ''; st.textContent = 'Guardando…';
+    callBackend('elegirCarpetaEmpresa', { presupuestoGH: ch.key, empresa: ch.empresa, ordenCompra: ch.ordenCompra, carpetaEmpresaId: ch.id }).then(function (d) {
+      if (!d || !d.ok) { btn.disabled = false; st.className = 'err'; st.textContent = 'No se pudo guardar (' + ((d && d.error) || 'error') + ').'; return; }
+      SERVICIOS = d.servicios; CARPETA_ELEGIDA[ch.key] = d.carpetaEmpresa;
+      cerrarElegirCarpeta_(); render();
+      if (ch.alTerminar) ch.alTerminar(d);
+    }).catch(function () { btn.disabled = false; st.className = 'err'; st.textContent = 'No se pudo conectar con el backend.'; });
+  });
+
+  // Renglón del paso "Ingreso": qué carpeta tiene el servicio y cómo elegirla o cambiarla
+  function carpetaEmpresaItem_(s, c, key) {
+    var div = document.createElement('div');
+    div.className = 'check-item';
+    div.style.flexDirection = 'column';
+    div.innerHTML = '<label style="font-size:11.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em;">Carpeta de la empresa (en 1. INFORMES)</label>';
+    var fila = document.createElement('div');
+    fila.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;';
+    var texto = document.createElement('span');
+    texto.style.fontSize = '12.5px';
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'btn'; btn.style.fontSize = '11.5px';
+    if (c.carpetaCampania) {
+      texto.innerHTML = '✓ ' + (CARPETA_ELEGIDA[key] ? '<b>' + esc(CARPETA_ELEGIDA[key]) + '</b> · ' : 'Elegida · ') +
+        '<a href="' + esc(c.carpetaCampania) + '" target="_blank" rel="noopener">abrir carpeta de la campaña</a>';
+      btn.textContent = 'Cambiar';
+      btn.title = 'Elegir otra carpeta de empresa. Lo que ya se generó queda donde está.';
+    } else {
+      texto.innerHTML = '<span style="color:var(--rojo);font-weight:600;">Sin elegir</span> — hasta que la elijas no se puede guardar la OT ni las cadenas de custodia.';
+      btn.textContent = 'Elegir carpeta'; btn.className = 'btn primary';
+    }
+    btn.addEventListener('click', function () { abrirElegirCarpeta_(key, s.empresa, s.ordenCompra, null, ''); });
+    fila.appendChild(texto); fila.appendChild(btn);
+    div.appendChild(fila);
+    return div;
+  }
+
+  // Si una acción (OT, CC...) devuelve que falta la carpeta, se abre el selector y se avisa cómo seguir.
+  function pedirCarpetaSiFalta_(data, s, key, avisar_) {
+    if (!data || data.ok || (data.error !== 'elegir_carpeta_empresa' && data.error !== 'varias_carpetas_posibles')) return false;
+    avisar_('Falta elegir la carpeta de la empresa. Elegila y volvé a tocar el botón.');
+    abrirElegirCarpeta_(key, s.empresa, s.ordenCompra, null, 'Antes de guardar archivos hace falta saber dónde.');
+    return true;
   }
 
   // Si la cotizacion se corrige despues de cargada, se puede subir la nueva sin
@@ -2291,12 +2441,8 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
     function resolver_(data, btn) {
       btn.disabled = false;
       if (!data.ok) {
-        if (data.error === 'varias_carpetas_posibles') {
-          fallo_('Hay varias carpetas posibles para esta empresa (' +
-            (data.candidatas || []).join(' / ') + '). No creo ninguna para no duplicar.');
-        } else {
-          fallo_('Error: ' + (data.error || 'desconocido'));
-        }
+        if (pedirCarpetaSiFalta_(data, s, s.presupuestoGH || s.claveServicio, fallo_)) return;
+        fallo_('Error: ' + (data.error || 'desconocido'));
         return;
       }
       SERVICIOS = data.servicios;
@@ -2481,7 +2627,9 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
         setTimeout(function () {
           document.getElementById('modalOverlay').style.display = 'none';
           render();
-        }, 1400);
+          // el servicio ya está cargado: se elige la carpeta de la empresa (no se crea ninguna sola)
+          abrirElegirCarpeta_(data.presupuestoGH, h.empresa, '', null, 'Cotización cargada.');
+        }, 900);
       }).catch(function () {
         document.getElementById('submitModalBtn').disabled = false;
         status.textContent = 'No se pudo conectar con el backend.';
