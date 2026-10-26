@@ -96,6 +96,27 @@
     .gh-login .loading-msg{ transition:none; } }
 
 
+  /* ---------- administrador de carpetas (borde derecho) ---------- */
+  #carpetasPanel{position:fixed;top:0;right:0;bottom:0;width:min(440px,100vw);background:var(--card);border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.14);z-index:70;display:none;flex-direction:column;}
+  #carpetasPanel.abierto{display:flex;}
+  #carpetasPanel header{position:static;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px 6px;background:transparent;border:0;box-shadow:none;}
+  #carpetasPanel h2{margin:0;font-size:16px;}
+  #carpetasHint{margin:0;padding:0 16px 8px;font-size:12px;color:var(--ink-soft);}
+  #carpetasMigas{padding:0 16px 8px;font-size:12.5px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;}
+  #carpetasMigas button{border:0;background:none;color:var(--brand-dark);cursor:pointer;padding:2px 0;font-size:12.5px;text-decoration:underline;}
+  #carpetasLista{flex:1;overflow:auto;border-top:1px solid var(--line);}
+  .carpeta-fila{display:flex;align-items:center;gap:8px;padding:9px 16px;border-bottom:1px solid var(--line);font-size:14px;}
+  .carpeta-fila .nom{flex:1;min-width:0;overflow-wrap:anywhere;background:none;border:0;text-align:left;color:var(--ink);cursor:pointer;padding:0;font-size:14px;}
+  .carpeta-fila .nom:hover{text-decoration:underline;}
+  .carpeta-fila .fec{font-size:11px;color:var(--ink-soft);white-space:nowrap;}
+  .carpeta-fila a{font-size:12px;color:var(--ink-soft);text-decoration:none;}
+  .carpeta-fila .papelera{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:4px 8px;cursor:pointer;font-size:13px;}
+  .carpeta-fila .papelera:hover{border-color:var(--rojo);}
+  .carpeta-fila .seguro{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--rojo);}
+  .carpeta-fila .seguro button{font-size:12px;padding:4px 8px;}
+  #carpetasEstado{padding:8px 16px;font-size:12.5px;min-height:18px;}
+  #carpetasEstado.err{color:var(--rojo);} #carpetasEstado.ok{color:var(--verde);}
+
   /* ---------- elegir carpeta de la empresa ---------- */
   #carpetaOverlay{display:none;position:fixed;inset:0;background:rgba(20,23,15,.5);align-items:center;justify-content:center;padding:16px;z-index:60;}
   #carpetaCard{background:var(--card);border-radius:var(--radius);padding:22px;width:100%;max-width:460px;max-height:90vh;display:flex;flex-direction:column;gap:10px;}
@@ -409,6 +430,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
         <button class="btn" id="clearFilter">Ver todos</button>
         <button class="btn" id="refreshBtn" title="Releer los datos desde el servidor">Actualizar</button>
         <button class="btn" id="borradosBtn" title="Ver y recuperar mediciones eliminadas">🗑 Borrados</button>
+        <button class="btn" id="carpetasBtn" title="Ver las carpetas de 1. INFORMES y mandar a la papelera las que sobran">📁 Carpetas</button>
       </div>
     </div>
 
@@ -424,6 +446,17 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
     <span>GH Consultora · Mediciones y Monitoreos</span>
   </footer>
 </div>
+
+<aside id="carpetasPanel" aria-label="Carpetas de 1. INFORMES">
+  <header>
+    <h2>📁 Carpetas de 1. INFORMES</h2>
+    <button class="btn" id="carpetasCerrar" type="button">Cerrar</button>
+  </header>
+  <p id="carpetasHint">Tocá el nombre para entrar. 🗑 manda la carpeta (con todo lo que tiene adentro) a la papelera de Drive: se puede recuperar desde ahí.</p>
+  <div id="carpetasMigas"></div>
+  <div id="carpetasLista"></div>
+  <div id="carpetasEstado"></div>
+</aside>
 
 <div id="carpetaOverlay">
   <div id="carpetaCard">
@@ -468,7 +501,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
   // para que una pestaña vieja se entere sola de que hay una version mas
   // nueva, en vez de quedarse corriendo el codigo con el que cargo para
   // siempre. Mismo mecanismo que en Seguimiento Ambiental.
-  var FRONTEND_VERSION = '2026-10-26T19:58';
+  var FRONTEND_VERSION = '2026-10-26T20:09:27';
 
   var idToken = null;
   var SERVICIOS = [];
@@ -543,7 +576,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
    *    despues de que fallo un intento.
    */
   var BACKEND_ESPEJO = 'https://script.google.com/macros/s/AKfycbwz5Eu-ScQ0qgUJQpMDE8GyotV92qIZNZn4aL1zsb269LiW0USACRPrZ1uwGG1POfxnTQ/exec';
-  var ACCIONES_LECTURA = { getData: 1, listarTemplatesCC: 1, listarBorrados: 1, getCatalogo: 1, getPlan: 1, getPlanes: 1, getCalibraciones: 1, listarCarpetasEmpresas: 1, verificarArchivos: 1 };
+  var ACCIONES_LECTURA = { getData: 1, listarTemplatesCC: 1, listarBorrados: 1, getCatalogo: 1, getPlan: 1, getPlanes: 1, getCalibraciones: 1, listarCarpetasEmpresas: 1, verificarArchivos: 1, listarCarpetasInformes: 1 };
   var ACCIONES_ARCHIVO = { cargarCotizacion: 1, reemplazarCotizacion: 1, subirCCPersonalizada: 1, subirArchivoPaso: 1 };
   var PLAN_LECTURA   = { escalones: [0, 4000, 8000, 13000, 20000], max: 5, porIntento: 25000, tope: 50000 };
   var PLAN_ESCRITURA = { escalones: [0, 15000, 30000], max: 3, porIntento: 60000, tope: 90000 };
@@ -939,6 +972,94 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
       pintarBorrados(d.borrados || []);
     }).catch(function () { avisar('No se pudo conectar con el backend.', 'error'); });
   }
+
+  /* --------------------- administrador de carpetas --------------------- */
+  var CARPETAS_VISTA = { padreId: '', datos: null, confirmando: '' };
+
+  function carpetasEstado_(msg, tipo) {
+    var e = document.getElementById('carpetasEstado');
+    e.className = tipo || ''; e.textContent = msg || '';
+  }
+
+  function cargarCarpetas_(padreId) {
+    CARPETAS_VISTA.padreId = padreId || ''; CARPETAS_VISTA.confirmando = '';
+    carpetasEstado_('Leyendo carpetas…');
+    return callBackend('listarCarpetasInformes', { padreId: padreId || '' }).then(function (d) {
+      if (!d || !d.ok) {
+        carpetasEstado_(d && d.error === 'auth_failed' ? 'Se venció la sesión. Cerrá sesión y volvé a entrar.' : 'No se pudo leer (' + ((d && d.error) || 'error') + ').', 'err');
+        return;
+      }
+      CARPETAS_VISTA.datos = d; carpetasEstado_('');
+      pintarCarpetas_();
+    }).catch(function () { carpetasEstado_('No se pudo conectar con el backend.', 'err'); });
+  }
+
+  function pintarCarpetas_() {
+    var d = CARPETAS_VISTA.datos; if (!d) return;
+    var migas = document.getElementById('carpetasMigas'); migas.innerHTML = '';
+    var raiz = document.createElement('button'); raiz.type = 'button'; raiz.textContent = '1. INFORMES';
+    raiz.addEventListener('click', function () { cargarCarpetas_(''); });
+    migas.appendChild(raiz);
+    d.camino.forEach(function (m, i) {
+      migas.appendChild(document.createTextNode(' › '));
+      if (i === d.camino.length - 1) { var t = document.createElement('strong'); t.textContent = m.nombre; migas.appendChild(t); return; }
+      var b = document.createElement('button'); b.type = 'button'; b.textContent = m.nombre;
+      b.addEventListener('click', function () { cargarCarpetas_(m.id); });
+      migas.appendChild(b);
+    });
+
+    var lista = document.getElementById('carpetasLista'); lista.innerHTML = '';
+    if (!d.carpetas.length) {
+      var vacio = document.createElement('div'); vacio.className = 'carpeta-fila'; vacio.style.color = 'var(--ink-soft)';
+      vacio.textContent = 'No hay carpetas acá' + (d.archivos ? ' (hay ' + d.archivos + ' archivo' + (d.archivos === 1 ? '' : 's') + ').' : '.');
+      lista.appendChild(vacio);
+    }
+    d.carpetas.forEach(function (c) {
+      var fila = document.createElement('div'); fila.className = 'carpeta-fila';
+      var nom = document.createElement('button'); nom.type = 'button'; nom.className = 'nom'; nom.textContent = '📁 ' + c.nombre;
+      nom.addEventListener('click', function () { cargarCarpetas_(c.id); });
+      var fec = document.createElement('span'); fec.className = 'fec'; fec.textContent = c.modificado || '';
+      var ab = document.createElement('a'); ab.href = limpiarUrl_(c.url); ab.target = '_blank'; ab.rel = 'noopener'; ab.textContent = 'Drive ↗';
+      fila.appendChild(nom); fila.appendChild(fec); fila.appendChild(ab);
+      if (CARPETAS_VISTA.confirmando === c.id) {
+        var seg = document.createElement('span'); seg.className = 'seguro'; seg.appendChild(document.createTextNode('¿A la papelera?'));
+        var si = document.createElement('button'); si.type = 'button'; si.className = 'btn primary'; si.textContent = 'Sí';
+        si.addEventListener('click', function () { borrarCarpeta_(c); });
+        var no = document.createElement('button'); no.type = 'button'; no.className = 'btn'; no.textContent = 'No';
+        no.addEventListener('click', function () { CARPETAS_VISTA.confirmando = ''; pintarCarpetas_(); });
+        seg.appendChild(si); seg.appendChild(no); fila.appendChild(seg);
+      } else {
+        var del = document.createElement('button'); del.type = 'button'; del.className = 'papelera'; del.title = 'Mandar a la papelera'; del.textContent = '🗑';
+        del.addEventListener('click', function () { CARPETAS_VISTA.confirmando = c.id; pintarCarpetas_(); });
+        fila.appendChild(del);
+      }
+      lista.appendChild(fila);
+    });
+  }
+
+  function borrarCarpeta_(c) {
+    CARPETAS_VISTA.confirmando = ''; carpetasEstado_('Mandando «' + c.nombre + '» a la papelera…');
+    callBackend('borrarCarpetaInformes', { id: c.id }).then(function (d) {
+      if (!d || !d.ok) { carpetasEstado_('No se pudo borrar (' + ((d && d.error) || 'error') + ').', 'err'); return; }
+      var n = d.contenido || {};
+      carpetasEstado_('«' + d.nombre + '» fue a la papelera de Drive (' + (n.archivos || 0) + ' archivos, ' + (n.carpetas || 0) + ' subcarpetas).' +
+        (d.serviciosSinCarpeta ? ' ' + d.serviciosSinCarpeta + ' servicio(s) quedaron sin carpeta: se vuelve a pedir al usarlos.' : ''), 'ok');
+      var est = document.getElementById('carpetasEstado').textContent;
+      cargarCarpetas_(CARPETAS_VISTA.padreId).then(function () { carpetasEstado_(est, 'ok'); });
+      if (d.serviciosSinCarpeta) {
+        callBackend('getData', {}).then(function (g) { if (g && g.ok) { SERVICIOS = g.servicios; render(); } }).catch(function () {});
+      }
+    }).catch(function () { carpetasEstado_('No se pudo conectar con el backend.', 'err'); });
+  }
+
+  document.getElementById('carpetasBtn').addEventListener('click', function () {
+    var panel = document.getElementById('carpetasPanel');
+    panel.classList.toggle('abierto');
+    if (panel.classList.contains('abierto')) cargarCarpetas_('');
+  });
+  document.getElementById('carpetasCerrar').addEventListener('click', function () {
+    document.getElementById('carpetasPanel').classList.remove('abierto');
+  });
 
   document.getElementById('borradosBtn').addEventListener('click', function () {
     if (VIENDO_BORRADOS) { alternarVistaBorrados(false); return; }
