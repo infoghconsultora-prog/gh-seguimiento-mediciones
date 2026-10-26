@@ -468,7 +468,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
   // para que una pestaña vieja se entere sola de que hay una version mas
   // nueva, en vez de quedarse corriendo el codigo con el que cargo para
   // siempre. Mismo mecanismo que en Seguimiento Ambiental.
-  var FRONTEND_VERSION = '2026-10-26T21:47';
+  var FRONTEND_VERSION = '2026-10-26T19:58';
 
   var idToken = null;
   var SERVICIOS = [];
@@ -636,11 +636,38 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
     });
   }
 
+  // El token de Google dura 1 hora. Si vence con el panel abierto, se pide uno nuevo en silencio
+  // (Google One Tap con la misma cuenta) y se repite el pedido; "auth_failed" significa que el backend
+  // no ejecuto nada, asi que repetirlo es seguro. Si Google no lo da, queda el aviso de siempre.
+  var renovacion = null;
+  function renovarSesion_() {
+    if (renovacion) return renovacion.promesa;
+    var r = { resolver: null };
+    r.promesa = new Promise(function (resolve) {
+      var fin = function (ok) { if (renovacion === r) renovacion = null; clearTimeout(reloj); resolve(ok); };
+      var reloj = setTimeout(function () { fin(false); }, 8000);
+      r.resolver = fin;
+      try {
+        google.accounts.id.prompt(function (n) {
+          if ((n.isNotDisplayed && n.isNotDisplayed()) || (n.isSkippedMoment && n.isSkippedMoment()) ||
+              (n.isDismissedMoment && n.isDismissedMoment() && n.getDismissedReason() !== 'credential_returned')) fin(false);
+        });
+      } catch (e) { fin(false); }
+    });
+    renovacion = r;
+    return r.promesa;
+  }
+
   function callBackend(action, extra) {
     enVuelo++;
     refrescarIndicador();
     var listo = function () { enVuelo = Math.max(0, enVuelo - 1); refrescarIndicador(); };
-    return pedirAlBackend(action, extra).then(
+    return pedirAlBackend(action, extra).then(function (v) {
+      if (v && v.error === 'auth_failed' && idToken && action !== 'getData') {
+        return renovarSesion_().then(function (ok) { return ok ? pedirAlBackend(action, extra) : v; });
+      }
+      return v;
+    }).then(
       function (v) { listo(); return v; },
       function (e) { listo(); throw e; });
   }
@@ -663,7 +690,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
   initTheme();
 
   window.onload = function () {
-    google.accounts.id.initialize({ client_id: CLIENT_ID, callback: handleCredentialResponse });
+    google.accounts.id.initialize({ client_id: CLIENT_ID, callback: handleCredentialResponse, auto_select: true, cancel_on_tap_outside: false });
     google.accounts.id.renderButton(document.getElementById('gsiButton'), { theme: 'outline', size: 'large', text: 'signin_with' });
   };
 
@@ -727,6 +754,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
 
   function handleCredentialResponse(response) {
     idToken = response.credential;
+    if (renovacion) { renovacion.resolver(true); return; } // renovacion silenciosa: la pantalla no cambia
     document.getElementById('gsiButton').style.display = 'none';
     document.getElementById('loginError').style.display = 'none';
     iniciarCargaVisual();
@@ -1204,7 +1232,12 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
     Promise.all([cargarCatalogo_(), callBackend('getPlan', { clave: key })]).then(function (r) {
       var d = r[1];
       st.cargando = false;
-      if (!d || !d.ok) { st.error = 'No se pudo leer el plan (' + ((d && d.error) || 'error') + ').'; render(); return; }
+      if (!d || !d.ok) {
+        st.error = (d && d.error === 'auth_failed')
+          ? 'Se venció la sesión. Cerrá sesión y volvé a entrar, después abrí de nuevo el plan.'
+          : 'No se pudo leer el plan (' + ((d && d.error) || 'error') + ').';
+        render(); return;
+      }
       st.items = d.items; st.correcciones = d.correcciones || {};
       render();
     }).catch(function () {
