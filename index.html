@@ -19,7 +19,7 @@
 <link rel="apple-touch-icon" sizes="167x167" href="icons/icon-167.png">
 <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="plan.js?v=2026-10-26T03:12"></script>
+<script src="plan.js?v=2026-10-26T21:47"></script>
 <style>
   :root{
     --verde:      #4c9a2a; --verde-bg:   #eaf4e2;
@@ -468,7 +468,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
   // para que una pestaña vieja se entere sola de que hay una version mas
   // nueva, en vez de quedarse corriendo el codigo con el que cargo para
   // siempre. Mismo mecanismo que en Seguimiento Ambiental.
-  var FRONTEND_VERSION = '2026-10-26T03:12';
+  var FRONTEND_VERSION = '2026-10-26T21:47';
 
   var idToken = null;
   var SERVICIOS = [];
@@ -1766,7 +1766,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
     lista.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;';
     generadas.forEach(function (cc) {
       var a = document.createElement('a');
-      a.href = cc.url;
+      a.href = limpiarUrl_(cc.url);
       a.target = '_blank';
       a.rel = 'noopener';
       a.className = 'btn primary';
@@ -2083,7 +2083,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
       input.style.display = 'none';
 
       var abrir = document.createElement('a');
-      abrir.href = c.otUrl;
+      abrir.href = limpiarUrl_(c.otUrl);
       abrir.target = '_blank';
       abrir.rel = 'noopener';
       abrir.className = 'btn primary';
@@ -2312,11 +2312,68 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
     return true;
   }
 
+  // Carpeta donde el panel guarda las cotizaciones cargadas: 3 GH MEDICIONES / 0. Cotizaciones aceptadas
+  var URL_CARPETA_COTIZACIONES = 'https://drive.google.com/drive/folders/1Wj4vqjTqHxTObzrQHsmUkuSrkc0Opz6V';
+  // Los enlaces de Drive para archivos de Office traen "?usp=drivesdk&ouid=...": el ouid los ata a la cuenta que creo el
+  // archivo y desde otra cuenta Google muestra "No se pudo abrir el archivo". Sin los parametros abren con cualquier cuenta.
+  function limpiarUrl_(u) {
+    return String(u || '').replace(/(https?:\/\/(?:docs|drive)\.google\.com\/[^\s|?]+)\?[^\s|]*/g, '$1');
+  }
+
   // Si la cotizacion se corrige despues de cargada, se puede subir la nueva sin
   // pasar por "+ Nueva medicion": reemplaza el archivo y el link de este paso.
   function cotizacionItem_(s, c, update_) {
     var div = textItem_('Cotización (link al archivo)', c.cotizacionUrl, function (v) { update_(s, 'cotizacionUrl', v); });
     var cont = div.querySelector('.field-inputs');
+
+    // Con la cotizacion cargada: un boton para abrirla (en vez de un link pelado para copiar) y dónde está guardada.
+    if (c.cotizacionUrl) {
+      var campoLink = div.querySelector('input[type=text]');
+      campoLink.value = limpiarUrl_(c.cotizacionUrl);
+      campoLink.style.display = 'none';
+      var keyCot = s.presupuestoGH || s.claveServicio || (s.empresa + '|' + s.fechaMuestreo);
+      verificarArchivos_(keyCot);
+      var botones = document.createElement('div');
+      botones.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;';
+      var abrirCot = document.createElement('a');
+      abrirCot.href = limpiarUrl_(c.cotizacionUrl);
+      abrirCot.target = '_blank';
+      abrirCot.rel = 'noopener';
+      abrirCot.className = 'btn primary';
+      abrirCot.style.textDecoration = 'none';
+      abrirCot.textContent = '📄 Abrir cotización';
+      if (archivoCaido_(keyCot, c.cotizacionUrl)) {
+        abrirCot.className = 'btn';
+        abrirCot.style.cssText = 'text-decoration:none;color:var(--rojo);border-color:var(--rojo);';
+        abrirCot.textContent = '⚠ La cotización ya no está en el Drive — subila de nuevo';
+        abrirCot.href = '#';
+        abrirCot.removeAttribute('target');
+        abrirCot.addEventListener('click', function (ev) { ev.preventDefault(); });
+      }
+      var carpetaCot = document.createElement('a');
+      carpetaCot.href = URL_CARPETA_COTIZACIONES;
+      carpetaCot.target = '_blank';
+      carpetaCot.rel = 'noopener';
+      carpetaCot.className = 'btn';
+      carpetaCot.style.cssText = 'text-decoration:none;font-size:11.5px;';
+      carpetaCot.textContent = '📁 Carpeta de cotizaciones';
+      var cambiarLink = document.createElement('button');
+      cambiarLink.type = 'button';
+      cambiarLink.className = 'btn';
+      cambiarLink.style.fontSize = '11.5px';
+      cambiarLink.textContent = 'Cambiar link';
+      cambiarLink.title = 'Pegar a mano el link de otro archivo';
+      cambiarLink.addEventListener('click', function () {
+        campoLink.style.display = campoLink.style.display === 'none' ? '' : 'none';
+        if (campoLink.style.display === '') campoLink.focus();
+      });
+      botones.appendChild(abrirCot); botones.appendChild(carpetaCot); botones.appendChild(cambiarLink);
+      cont.appendChild(botones);
+      var donde = document.createElement('div');
+      donde.style.cssText = 'font-size:11px;color:var(--ink-soft);margin-top:2px;';
+      donde.textContent = 'Se guarda en 3 GH MEDICIONES › 0. Cotizaciones aceptadas.';
+      cont.appendChild(donde);
+    }
 
     var fila = document.createElement('div');
     fila.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;';
