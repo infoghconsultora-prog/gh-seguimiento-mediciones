@@ -19,7 +19,7 @@
 <link rel="apple-touch-icon" sizes="167x167" href="icons/icon-167.png">
 <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="plan.js?v=2026-10-25T23:41"></script>
+<script src="plan.js?v=2026-10-26T03:12"></script>
 <style>
   :root{
     --verde:      #4c9a2a; --verde-bg:   #eaf4e2;
@@ -468,7 +468,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
   // para que una pestaña vieja se entere sola de que hay una version mas
   // nueva, en vez de quedarse corriendo el codigo con el que cargo para
   // siempre. Mismo mecanismo que en Seguimiento Ambiental.
-  var FRONTEND_VERSION = '2026-10-25T23:41';
+  var FRONTEND_VERSION = '2026-10-26T03:12';
 
   var idToken = null;
   var SERVICIOS = [];
@@ -543,7 +543,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
    *    despues de que fallo un intento.
    */
   var BACKEND_ESPEJO = 'https://script.google.com/macros/s/AKfycbwz5Eu-ScQ0qgUJQpMDE8GyotV92qIZNZn4aL1zsb269LiW0USACRPrZ1uwGG1POfxnTQ/exec';
-  var ACCIONES_LECTURA = { getData: 1, listarTemplatesCC: 1, listarBorrados: 1, getCatalogo: 1, getPlan: 1, getPlanes: 1, getCalibraciones: 1, listarCarpetasEmpresas: 1 };
+  var ACCIONES_LECTURA = { getData: 1, listarTemplatesCC: 1, listarBorrados: 1, getCatalogo: 1, getPlan: 1, getPlanes: 1, getCalibraciones: 1, listarCarpetasEmpresas: 1, verificarArchivos: 1 };
   var ACCIONES_ARCHIVO = { cargarCotizacion: 1, reemplazarCotizacion: 1, subirCCPersonalizada: 1, subirArchivoPaso: 1 };
   var PLAN_LECTURA   = { escalones: [0, 4000, 8000, 13000, 20000], max: 5, porIntento: 25000, tope: 50000 };
   var PLAN_ESCRITURA = { escalones: [0, 15000, 30000], max: 3, porIntento: 60000, tope: 90000 };
@@ -1588,7 +1588,7 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
     var fechaOk = ingresoOk && c.ingresoGestionado;
     wrap.appendChild(stepPaso_('6. Fecha coordinada', fechaOk, [
       fechaCoordinadaItem_(s, c, update_),
-      ccParaImprimirItem_(c)
+      ccParaImprimirItem_(c, key)
     ]));
 
     // 7. Ejecucion: la medicion se marca realizada solo con las CC llenas subidas
@@ -1719,10 +1719,33 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
     return div;
   }
 
+
+  // ¿Siguen existiendo la OT y las cadenas de custodia? Se pregunta una vez por servicio (y cada 3 min como mucho).
+  var ESTADO_ARCHIVOS = {};   // key -> { cuando, mapa: { url: 'ok'|'papelera'|'no_disponible' } }
+  function verificarArchivos_(key) {
+    var e = ESTADO_ARCHIVOS[key];
+    if (e && Date.now() - e.cuando < 180000) return;
+    ESTADO_ARCHIVOS[key] = { cuando: Date.now(), mapa: e ? e.mapa : {} };   // evita repetir si falla
+    callBackend('verificarArchivos', { clave: key }).then(function (d) {
+      if (!d || !d.ok) return;
+      var m = {};
+      (d.estados || []).forEach(function (x) { m[x.url] = x.estado; });
+      var hayCambio = JSON.stringify(m) !== JSON.stringify((e && e.mapa) || {});
+      ESTADO_ARCHIVOS[key] = { cuando: Date.now(), mapa: m };
+      if (hayCambio) render();
+    }).catch(function () { /* sin verificar, los botones quedan como estaban */ });
+  }
+  function archivoCaido_(key, url) {
+    var e = ESTADO_ARCHIVOS[key];
+    var est = e && e.mapa ? e.mapa[url] : '';
+    return est && est !== 'ok';
+  }
+
   // Botones para imprimir las CC ya generadas. Van con la fecha de muestreo
   // porque es el momento en que se imprimen y se llevan a campo.
-  function ccParaImprimirItem_(c) {
+  function ccParaImprimirItem_(c, key) {
     var generadas = parseCCs(c.ccUrl);
+    if (generadas.length) verificarArchivos_(key);
     var div = document.createElement('div');
     div.className = 'check-item';
     div.style.flexDirection = 'column';
@@ -1750,6 +1773,16 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
       a.style.textDecoration = 'none';
       a.textContent = '🖨 ' + (cc.tipo || 'Cadena de custodia');
       a.title = 'Abrir para imprimir';
+      if (archivoCaido_(key, cc.url)) {
+        // el archivo ya no esta (carpeta o archivo borrado): mejor decirlo que mandar a una pantalla de error de Google
+        a.className = 'btn';
+        a.style.cssText = 'text-decoration:none;color:var(--rojo);border-color:var(--rojo);';
+        a.textContent = '⚠ ' + (cc.tipo || 'Cadena de custodia') + ' — archivo no disponible';
+        a.title = 'Este archivo ya no está en el Drive (o está en la papelera). Generá la cadena de custodia de nuevo en el paso 3.';
+        a.href = '#';
+        a.removeAttribute('target');
+        a.addEventListener('click', function (ev) { ev.preventDefault(); avisar('Esa cadena de custodia ya no está en el Drive. Generala de nuevo en el paso 3 («Generar CC estándar»).', 'error'); });
+      }
       lista.appendChild(a);
     });
     div.appendChild(lista);
@@ -2056,6 +2089,16 @@ html[data-escala="150"] .gh-login-card{padding-left:8px;padding-right:8px}
       abrir.className = 'btn primary';
       abrir.style.textDecoration = 'none';
       abrir.textContent = '🖨 Abrir OT para imprimir';
+      var keyOT = s.presupuestoGH || s.claveServicio || (s.empresa + '|' + s.fechaMuestreo);
+      verificarArchivos_(keyOT);
+      if (archivoCaido_(keyOT, c.otUrl)) {
+        abrir.className = 'btn';
+        abrir.style.cssText = 'text-decoration:none;color:var(--rojo);border-color:var(--rojo);';
+        abrir.textContent = '⚠ La OT ya no está en el Drive — tocá «Regenerar»';
+        abrir.href = '#';
+        abrir.removeAttribute('target');
+        abrir.addEventListener('click', function (ev) { ev.preventDefault(); });
+      }
 
       var cambiar = document.createElement('button');
       cambiar.type = 'button';
